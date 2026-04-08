@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.foodshare.mapper.ShopMapper">
+
+    <select id="selectNearbyShops" resultType="com.foodshare.entity.Shop">
+        SELECT
+        id, user_id, name, cover, address, longitude, latitude,
+        phone, business_hours, category_id, status, create_time, legal_name, shop_images,
+        ST_Distance_Sphere(
+        point(longitude, latitude),
+        point(#{userLng}, #{userLat})
+        ) AS distance
+        FROM shop
+        WHERE status = 1 AND longitude IS NOT NULL
+        AND latitude IS NOT NULL
+        <if test="radius != null">
+            AND ST_Distance_Sphere(point(longitude, latitude), point(#{userLng}, #{userLat})) &lt;= #{radius}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND name LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        <if test="categoryId != null">
+            AND category_id = #{categoryId}
+        </if>
+        ORDER BY distance ASC </select>
+
+</mapper>

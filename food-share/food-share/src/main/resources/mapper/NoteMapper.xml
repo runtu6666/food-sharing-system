@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.foodshare.mapper.NoteMapper">
+
+    <!--
+        查询笔记列表(支持分类筛选、关键词搜索、排序、分页)
+
+        参数说明:
+        - categoryId: 分类ID(可选,不传则查询所有分类)
+        - keyword: 搜索关键词(可选,模糊匹配标题和内容)
+        - sort: 排序方式(latest-最新, hot-热门)
+        - shopId: 店铺ID(可选,查询某店铺的所有笔记)
+        - offset: 分页偏移量
+        - userId: 当前用户ID(用于判断是否已点赞/收藏)
+
+        返回字段:
+        - note表所有字段
+        - nickname: 发布者昵称(从user表关联查询)
+        - avatar: 发布者头像(从user表关联查询)
+        - shopName: 店铺名称(从shop表关联查询)
+        - categoryName: 分类名称(从category表关联查询)
+        - liked: 当前用户是否已点赞(1-已点赞, 0-未点赞)
+        - collected: 当前用户是否已收藏(1-已收藏, 0-未收藏)
+    -->
+    <select id="findNotes" resultType="java.util.Map">
+        SELECT
+        n.id,
+        n.user_id AS userId,
+        n.shop_id AS shopId,
+        n.title,
+        n.content,
+        n.images,
+        n.score,
+        n.like_count AS likeCount,
+        n.collect_count AS collectCount,
+        n.category_id AS categoryId,
+        n.status,
+        n.reject_reason AS rejectReason,
+        n.create_time AS createTime,
+        u.nickname,
+        u.avatar,
+        s.name AS shopName,
+        c.name AS categoryName,
+        (SELECT COUNT(*) FROM likes WHERE note_id = n.id AND user_id = #{userId}) AS liked,
+        (SELECT COUNT(*) FROM collect WHERE note_id = n.id AND user_id = #{userId}) AS collected
+        FROM note n
+        LEFT JOIN user u ON n.user_id = u.id
+        LEFT JOIN shop s ON n.shop_id = s.id
+        LEFT JOIN category c ON n.category_id = c.id
+        WHERE n.status = 1
+        <if test="categoryId != null">
+            AND n.category_id = #{categoryId}
+        </if>
+        <if test="shopId != null">
+            AND n.shop_id = #{shopId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (n.title LIKE CONCAT('%', #{keyword}, '%')
+            OR n.content LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <choose>
+            <when test="sort == 'hot'">
+                ORDER BY (n.like_count + n.collect_count) DESC, n.create_time DESC
+            </when>
+            <otherwise>
+                ORDER BY n.create_time DESC
+            </otherwise>
+        </choose>
+        LIMIT #{offset}, 12
+    </select>
+
+</mapper>
