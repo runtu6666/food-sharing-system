@@ -256,6 +256,18 @@ public interface NoteMapper {
             "ORDER BY l.id DESC")
     List<Map<String, Object>> findLikeUsersByAuthorId(@Param("userId") Long userId);
 
+    /**
+     * 查询某用户点赞过的所有笔记
+     * 使用场景: 个人中心"点赞记录"列表
+     */
+    @Select("SELECT n.*, u.nickname " +
+            "FROM likes l " +
+            "LEFT JOIN note n ON l.note_id = n.id " +
+            "LEFT JOIN user u ON n.user_id = u.id " +
+            "WHERE l.user_id = #{userId} AND n.status = 1 " +
+            "ORDER BY l.create_time DESC")
+    List<Map<String, Object>> findLikedNotesByUserId(@Param("userId") Long userId);
+
     // ==================== 收藏功能 ====================
 
     /**

@@ -67,8 +67,14 @@
               :class="['menu-item', activeTab === 'collect' ? 'active' : '']"
               @click="activeTab = 'collect'; loadCollects()"
           >⭐ 我的收藏</div>
+
+          <div
+              :class="['menu-item', activeTab === 'my_likes' ? 'active' : '']"
+              @click="activeTab = 'my_likes'; loadMyLikedNotes()"
+          >👍 点赞记录</div>
+
           <!--
-            新增“获赞记录”菜单：
+            “获赞记录”菜单：
             用于展示“谁点赞了我的哪篇笔记”，数据来源是 /note/likes/received。
           -->
           <div
@@ -129,8 +135,8 @@
                   <span class="meta-time">{{ note.createTime }}</span>
                 </div>
                 <!-- 被驳回时显示原因 -->
-                <div class="reject-reason" v-if="note.status === 2 && note.rejectReason">
-                  驳回原因：{{ note.rejectReason }}
+                <div class="reject-reason" v-if="note.status === 2 && (note.rejectReason || note.reject_reason)">
+                  驳回原因：{{ note.rejectReason || note.reject_reason }}
                 </div>
               </div>
               <!-- 笔记操作区：支持编辑和删除 -->
@@ -171,6 +177,36 @@
               </div>
               <!-- 取消收藏按钮 -->
               <button class="delete-btn" @click.stop="cancelCollect(note.id)">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="activeTab === 'my_likes'">
+          <div class="section-header">
+            <h2>点赞记录</h2>
+          </div>
+
+          <div v-if="myLikedNotes.length === 0" class="empty-state">
+            <div class="empty-icon">👍</div>
+            <p>还没有点赞过任何笔记</p>
+            <button class="empty-btn" @click="$router.push('/home')">去发现美食</button>
+          </div>
+
+          <div class="my-notes-list">
+            <div v-for="note in myLikedNotes" :key="note.id" class="my-note-item clickable" @click="goDetail(note.id)">
+              <div class="my-note-cover">
+                <img v-if="note.images" :src="note.images.split('|||')[0]" alt="封面"/>
+                <div v-else class="cover-empty">🍜</div>
+              </div>
+              <div class="my-note-info">
+                <div class="my-note-title">{{ note.title }}</div>
+                <div class="my-note-content">{{ note.content }}</div>
+                <div class="my-note-meta">
+                  <span class="meta-item">作者：{{ note.nickname }}</span>
+                  <span class="meta-item">❤️ {{ note.likeCount || note.like_count || 0 }}</span>
+                  <span class="meta-item">⭐ {{ note.collectCount || note.collect_count || 0 }}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -347,6 +383,7 @@ export default {
       activeTab: 'notes',   // 当前激活的标签
       myNotes: [],          // 我发布的笔记列表
       collectNotes: [],     // 我收藏的笔记列表
+      myLikedNotes: [],     // 我点赞过的笔记列表
       likeRecords: [],      // 我的获赞明细列表
       commentRecords: [],   // 我收到的评论记录
       categories: [],       // 分类列表（用于编辑笔记时选择分类）
@@ -393,6 +430,11 @@ export default {
     if (this.$route.query.tab === 'collect') {
       this.activeTab = 'collect'
     }
+    if (this.$route.query.tab === 'my_likes') {
+      this.activeTab = 'my_likes'
+      // 重新加载点赞列表，这样取消点赞的笔记一返回就会自动从列表消失
+      this.loadMyLikedNotes()
+    }
     if (this.$route.query.tab === 'likes') {
       this.activeTab = 'likes'
     }
@@ -423,6 +465,14 @@ export default {
         params: { userId: this.user.id }
       })
       if (res.data.code === 200) this.collectNotes = res.data.data
+    },
+
+    // 加载我点赞过的笔记
+    async loadMyLikedNotes() {
+      const res = await this.$axios.get('/note/liked', {
+        params: { userId: this.user.id }
+      })
+      if (res.data.code === 200) this.myLikedNotes = res.data.data
     },
 
     // 加载我的获赞记录（谁点赞了哪篇笔记）

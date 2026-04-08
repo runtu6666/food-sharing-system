@@ -145,6 +145,24 @@ public class NoteController {
     }
 
     /**
+     * 查询我点赞过的所有笔记
+     *
+     * 接口地址: GET /note/liked?userId=1
+     * 使用场景: 个人中心"点赞记录"列表
+     */
+    @GetMapping("/liked")
+    public Result myLikedNotes(@RequestParam Long userId) {
+        // 校验用户是否被封禁
+        if (isBanned(userId)) {
+            return bannedResult();
+        }
+
+        // 直接调用 mapper 查询
+        List<Map<String, Object>> notes = noteMapper.findLikedNotesByUserId(userId);
+        return Result.success(notes);
+    }
+
+    /**
      * 根据店铺ID查询关联笔记
      *
      * 接口地址: GET /note/byShop?shopId=1
