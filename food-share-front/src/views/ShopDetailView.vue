@@ -72,6 +72,31 @@
         </div>
 
         <div v-show="activeTab === 'reviews'" class="tab-panel">
+
+          <div class="publish-review-box">
+            <div class="rating-select">
+              <span class="rating-label">给店铺打分：</span>
+              <span
+                  v-for="n in 5"
+                  :key="'star-'+n"
+                  @click="newReview.rating = n"
+                  :class="['star', n <= newReview.rating ? 'active' : '']"
+              >
+                {{ n <= newReview.rating ? '⭐' : '☆' }}
+              </span>
+            </div>
+            <textarea
+                v-model="newReview.content"
+                class="review-input"
+                placeholder="这家店味道怎么样？环境如何？服务好吗？和大家分享一下吧..."
+                maxlength="200"
+            ></textarea>
+            <div class="submit-row">
+              <button class="submit-review-btn" :disabled="submitting" @click="submitReview">
+                {{ submitting ? '提交中...' : '发布评价' }}
+              </button>
+            </div>
+          </div>
           <div v-if="loadingReviews" class="loading-box">正在加载评价...</div>
           <div v-else-if="reviews.length === 0" class="empty-box">暂时还没有人评价，快去抢沙发！</div>
           <div v-else class="review-list">
@@ -81,7 +106,7 @@
                   <div class="avatar">{{ review.username ? review.username[0] : 'U' }}</div>
                   <span class="name">{{ review.username }}</span>
                 </div>
-                <div class="rating">{'⭐'.repeat(review.rating)}</div>
+                <div class="rating">{{'⭐'.repeat(review.rating)}}</div>
               </div>
               <div class="review-content">{{ review.content }}</div>
               <div class="review-time">{{ review.createTime }}</div>
@@ -125,7 +150,15 @@ export default {
 
       // 图片预览相关状态
       showPreview: false,
-      previewImageUrl: ''
+      previewImageUrl: '',
+
+      // 评价表单绑定的数据
+      user: JSON.parse(localStorage.getItem('user') || '{}'),
+      newReview: {
+        rating: 5,
+        content: ''
+      },
+      submitting: false,
     }
   },
   mounted() {
@@ -169,6 +202,42 @@ export default {
         console.error(e);
       } finally {
         this.loadingDishes = false;
+      }
+    },
+
+    // 提交评价到后端
+    async submitReview() {
+      if (!this.user || !this.user.id) {
+        this.$message.warning('请先登录后再发表评价');
+        return;
+      }
+      if (!this.newReview.content.trim()) {
+        this.$message.warning('评价内容不能为空哦');
+        return;
+      }
+      this.submitting = true;
+      try {
+        const res = await this.$axios.post('/shop/reviews/add', {
+          shopId: this.shopId,
+          userId: this.user.id,
+          rating: this.newReview.rating,
+          content: this.newReview.content
+        });
+        if (res.data.code === 200) {
+          this.$message.success('评价成功！');
+          // 清空输入框并重置星星
+          this.newReview.content = '';
+          this.newReview.rating = 5;
+          // 重新拉取最新的评价列表，实现无刷新更新
+          this.fetchShopReviews();
+        } else {
+          this.$message.error(res.data.message || '评价失败');
+        }
+      } catch (e) {
+        console.error(e);
+        this.$message.error('系统异常，请稍后重试');
+      } finally {
+        this.submitting = false;
       }
     },
 
@@ -312,7 +381,7 @@ export default {
 .reply-label { font-size: 13px; font-weight: bold; color: #ff6b35; margin-right: 6px; }
 .reply-text { font-size: 13px; color: #555; line-height: 1.5; }
 
-/* ===== 全局交互辅助样式 ===== */
+/* 全局交互辅助样式 */
 .clickable-img { cursor: pointer; transition: opacity 0.2s; }
 .clickable-img:hover { opacity: 0.9; }
 
@@ -346,4 +415,73 @@ export default {
 .dish-price-wrap { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
 .dish-discount { font-size: 18px; font-weight: 900; color: #e53935; }
 .old-price { text-decoration: line-through; color: #999; font-size: 13px; font-weight: normal; }
+
+/* 发表评价区域样式 */
+.publish-review-box {
+  background: #fafafa;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid #eee;
+  margin-bottom: 24px;
+}
+.rating-select {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.rating-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-right: 8px;
+}
+.publish-review-box .star {
+  font-size: 20px;
+  cursor: pointer;
+  transition: transform 0.2s;
+  color: #ccc;
+}
+.publish-review-box .star.active {
+  color: #ffd93d;
+}
+.publish-review-box .star:hover {
+  transform: scale(1.2);
+}
+.review-input {
+  width: 100%;
+  height: 80px;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  resize: none;
+  outline: none;
+  font-size: 14px;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+.review-input:focus {
+  border-color: #ff6b35;
+}
+.submit-row {
+  text-align: right;
+  margin-top: 12px;
+}
+.submit-review-btn {
+  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  color: white;
+  border: none;
+  padding: 8px 24px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.submit-review-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.submit-review-btn:not(:disabled):hover {
+  transform: translateY(-2px);
+}
 </style>

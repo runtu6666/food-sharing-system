@@ -69,7 +69,11 @@ public interface NoteMapper {
      * @param userId 用户ID
      * @return 该用户发布的所有笔记(按时间倒序)
      */
-    @Select("SELECT * FROM note WHERE user_id = #{userId} ORDER BY create_time DESC")
+    @Select("SELECT n.*, s.name AS shopName " +
+            "FROM note n " +
+            "LEFT JOIN shop s ON n.shop_id = s.id " +
+            "WHERE n.user_id = #{userId} " +
+            "ORDER BY n.create_time DESC")
     List<Map<String, Object>> findByUserId(@Param("userId") Long userId);
 
     /**
