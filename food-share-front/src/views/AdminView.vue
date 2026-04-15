@@ -351,9 +351,10 @@
               {{ shop.legalName || shop.legal_name || '未填写' }}
             </span>
                   </div>
-                  <div class="info-item" v-if="shop.businessHours">
+                  <div class="info-item">
                     <span class="info-label">🕐 营业</span>
-                    <span class="info-value">{{ shop.businessHours }}</span>
+                    <span class="info-value" :class="!(shop.businessHours || shop.business_hours) ? 'missing' : ''">
+                      {{ shop.businessHours || shop.business_hours || '未填写' }}</span>
                   </div>
                 </div>
 
