@@ -212,6 +212,8 @@
                       :src="note.images.split('|||')[currentImageIndex[note.id] || 0]"
                       class="main-image"
                       alt="笔记图片"
+                      @click="openImagePreview(note.images.split('|||')[currentImageIndex[note.id] || 0])"
+                      style="cursor: pointer;"
                   />
                   <!-- 多图时显示切换小圆点 -->
                   <div v-if="note.images.split('|||').length > 1" class="image-nav">
@@ -304,6 +306,8 @@
                       :src="(shop.shopImages || shop.shop_images).split('|||')[shopImgIndex[shop.id] || 0]"
                       class="shop-main-img"
                       alt="店铺照片"
+                      @click="openImagePreview((shop.shopImages || shop.shop_images).split('|||')[shopImgIndex[shop.id] || 0])"
+                      style="cursor: pointer;"
                   />
                   <!-- 多图切换圆点 -->
                   <div v-if="(shop.shopImages || shop.shop_images).split('|||').length > 1" class="image-nav">
@@ -641,6 +645,13 @@
       </template>
     </el-dialog>
 
+    <!-- 图片预览弹窗 -->
+    <el-dialog v-model="previewVisible" title="🔎 图片预览" width="700px" destroy-on-close>
+      <div style="text-align: center;">
+        <img :src="previewImageUrl" style="max-width: 100%; max-height: 70vh; border-radius: 8px; object-fit: contain;" alt="放大预览" />
+      </div>
+    </el-dialog>
+
   </div>
 </template>
 
@@ -674,6 +685,8 @@ export default {
       searchNoteKeyword: '', // 笔记搜索词
       sensitiveWords: [],    // 敏感词列表数据
       newWord: '',           // 输入框绑定的新敏感词
+      previewVisible: false, // 控制图片预览弹窗显示
+      previewImageUrl: '',   // 存放当前放大预览的图片URL
     }
   },
   mounted() {
@@ -733,6 +746,12 @@ export default {
     async loadShops() {
       const res = await this.$axios.get('/admin/shops/pending')
       if (res.data.code === 200) this.shops = res.data.data
+    },
+
+    // 打开图片放大预览
+    openImagePreview(url) {
+      this.previewImageUrl = url;
+      this.previewVisible = true;
     },
 
     // 审核通过笔记（status=1表示通过）
@@ -858,12 +877,31 @@ export default {
     // 调用后端接口将该店铺状态改为-1（拒绝）
     // 操作完成后刷新商家列表
     async rejectShop(id) {
-      // 发送拒绝请求，传入店铺id
-      await this.$axios.post('/admin/shops/reject', { id })
-      // 提示操作成功
-      this.$message.success('已拒绝该商家申请')
-      // 重新加载待审批商家列表
-      this.loadShops()
+      try {
+        // 第一步：等待用户在弹窗里输入原因并点击确定
+        const { value } = await this.$prompt('请输入驳回店铺的具体原因（如：实景照片不清晰、地图定位不准确等）', '❌ 驳回确认', {
+          confirmButtonText: '确定驳回',
+          cancelButtonText: '取消',
+          inputPattern: /\S/,
+          inputErrorMessage: '驳回原因不能为空'
+        });
+
+        // 第二步：用户点了确定，拿到 value，等待网络请求
+        const res = await this.$axios.post('/admin/shops/reject', {
+          id: id,
+          rejectReason: value
+        });
+
+        if (res.data.code === 200) {
+          this.$message.success('店铺已成功驳回');
+          this.loadShops();
+        } else {
+          this.$message.error(res.data.message || '驳回失败');
+        }
+      } catch (error) {
+        // 第三步：如果报错，或者用户点击了“取消”按钮，就会进入这里
+        this.$message.info('已取消驳回操作');
+      }
     },
 
     // 加载所有已发布笔记列表

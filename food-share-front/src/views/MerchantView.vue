@@ -181,11 +181,11 @@
 
         <!-- 左侧：店铺信息 -->
         <div class="shop-info-card">
-          <div :class="['shop-status-banner', myShop.status === 1 ? 'approved' : (myShop.status === 2 ? 'banned' : (myShop.status === -1 ? 'rejected' : 'pending'))]">
-            {{ myShop.status === 1 ? '✅ 已通过审核，正常营业中' :
-              (myShop.status === 2 ? '🚫 该店铺已被封禁！请修改重新提交，或联系管理员申诉: 15154797270@163.com' :
-                  (myShop.status === -1 ? '❌ 审核已拒绝，请修改后重新提交' : '⏳ 审核中，请耐心等待')) }}
-          </div>
+        <div :class="['shop-status-banner', myShop.status === 1 ? 'approved' : (myShop.status === 2 ? 'banned' : (myShop.status === -1 ? 'rejected' : 'pending'))]">
+          {{ myShop.status === 1 ? '✅ 已通过审核，正常营业中' :
+            (myShop.status === 2 ? '🚫 该店铺已被封禁！请修改重新提交，或联系管理员申诉: 15154797270@163.com' :
+                (myShop.status === -1 ? `❌ 审核已拒绝：${myShop.rejectReason || myShop.reject_reason || '资料不符'}。请修改后重新提交` : '⏳ 审核中，请耐心等待')) }}
+        </div>
 
           <div class="shop-detail">
             <h2 class="shop-name">{{ myShop.name }}</h2>
@@ -228,22 +228,22 @@
             </div>
 
             <div class="form-item shop-image-upload-item">
-              <label>重新上传店铺实景图 (将覆盖旧图)</label>
+              <label>管理店铺实景图 (最多3张)</label>
 
               <div class="shop-image-upload" v-if="editForm.shopImages && editForm.shopImages.length > 0" style="margin-bottom: 12px;">
                 <div v-for="(img, index) in editForm.shopImages" :key="index" class="shop-img-preview">
-                  <img :src="img" alt="新图片预览"/>
+                  <img :src="img" alt="图片预览"/>
                   <div class="del-img" @click="editForm.shopImages.splice(index, 1)">✕</div>
                 </div>
               </div>
 
-              <div class="upload-btn-wrap">
+              <div class="upload-btn-wrap" v-if="!editForm.shopImages || editForm.shopImages.length < 3">
                 <button class="upload-trigger-btn" @click="triggerImageUpload">
-                  📸 选择新图片
+                  📸 添加新图片
                 </button>
-                <span class="upload-tip" v-if="editForm.shopImages && editForm.shopImages.length > 0">
-                已选中 <b>{{ editForm.shopImages.length }}</b> 张，点击保存生效
-              </span>
+                <span class="upload-tip">
+                  已选 <b>{{ editForm.shopImages ? editForm.shopImages.length : 0 }}</b> / 3 张
+                </span>
               </div>
 
               <input
@@ -397,7 +397,7 @@
                     <img v-if="dish.image" :src="dish.image" class="dish-img clickable-img" alt="菜品图片" @click="handlePreview(dish.image)"/>
                     <div v-else class="dish-no-img">暂无图片</div>
                     <div :class="['dish-status-tag', dish.status === 1 ? 'on-sale' : 'off-sale']">
-                      {{ dish.status === 1 ? '售卖中' : '已下架' }}
+                      {{ dish.status === 1 ? '售卖中' : '已售罄' }}
                     </div>
                   </div>
                   <div class="dish-info">
@@ -414,7 +414,7 @@
                     <div class="dish-actions">
                       <button class="dish-btn edit" @click="openDishDialog(dish)">编辑</button>
                       <button class="dish-btn toggle" @click="toggleDishStatus(dish)">
-                        {{ dish.status === 1 ? '下架' : '上架' }}
+                        {{ dish.status === 1 ? '设为售罄' : '重新上架' }}
                       </button>
                       <button class="dish-btn delete" @click="deleteDish(dish.id)">删除</button>
                     </div>
@@ -795,9 +795,12 @@ export default {
           this.myShop = this.myShops.length > 0 ? this.myShops[0] : null
 
           if (this.myShop) {
+            // 初始化时，把数据库里现有的图片解析到编辑表单中
+            this.editForm.shopImages = (this.myShop.shopImages || this.myShop.shop_images) ?
+                (this.myShop.shopImages || this.myShop.shop_images).split('|||') : [];
+
             this.loadShopData()
           }
-          // 地图初始化已移至watch中
         }
       } catch (error) {
         console.error('加载店铺失败:', error)
@@ -807,6 +810,10 @@ export default {
 
     switchShop(shop) {
       this.myShop = shop
+      // 左侧切换店铺时，也要同步把对应店铺的图片解析进来
+      this.editForm.shopImages = (shop.shopImages || shop.shop_images) ?
+          (shop.shopImages || shop.shop_images).split('|||') : [];
+
       this.loadShopData()
     },
 
@@ -880,7 +887,16 @@ export default {
       const files = event.target.files;
       if (!files || files.length === 0) return;
 
-      this.$message.info(`正在读取 ${files.length} 张图片...`);
+      // 计算还能上传几张
+      const remaining = 3 - (this.editForm.shopImages ? this.editForm.shopImages.length : 0);
+      if (remaining <= 0) {
+        this.$message.warning('最多只能保存 3 张图片！');
+        return;
+      }
+
+      // 截取安全数量的文件
+      const filesToProcess = Array.from(files).slice(0, remaining);
+      this.$message.info(`正在读取 ${filesToProcess.length} 张图片...`);
 
       // 允许多图上传，用 Promise.all 确保所有图片都读取完毕
       const readFilePromises = [];
@@ -1010,6 +1026,14 @@ export default {
 
     // 真正发送更新请求给后端
     async doUpdate() {
+      // 校验：不能把图片全删光
+      if (!this.editForm.shopImages || this.editForm.shopImages.length === 0) {
+        this.$message.warning('请至少保留一张店铺照片！');
+        return;
+      }
+
+      const finalImages = this.editForm.shopImages.join('|||');
+
       const res = await this.$axios.post('/shop/update', {
         id: this.myShop.id,
         userId: this.user.id,
@@ -1020,13 +1044,13 @@ export default {
         longitude: this.editForm.longitude || this.myShop.longitude,
         latitude: this.editForm.latitude || this.myShop.latitude,
         name: this.myShop.name,
-        // 【逻辑更新】：优先提交上传的新图片字符串，若无新图片则维持旧图片数据，防止被SQL覆写为空
-        shopImages: (this.editForm.shopImages && this.editForm.shopImages.length > 0) ? this.editForm.shopImages.join('|||') : (this.myShop.shopImages || this.myShop.shop_images)
+        // 【逻辑更新】：不再区分单独的新旧图片，统一提交经过动态增删管理的图片数组字符串
+        shopImages: finalImages
       })
       if (res.data.code === 200) {
         this.$message.success('修改已提交，需等待管理员重新审核后生效！')
-        // 修改完毕后清空表单，防止串台
-        this.editForm = { phone: '', businessHours: '', address: '', latitude: null, longitude: null };
+        // 修改完毕后清空表单，防止串台（注：这里保留了当前的图片数组，防止再次点开修改时图片闪烁）
+        this.editForm = { phone: '', businessHours: '', address: '', latitude: null, longitude: null, shopImages: finalImages.split('|||') };
         this.loadMyShop()
       }
     },
@@ -1200,7 +1224,7 @@ export default {
       });
       if (res.data.code === 200) {
         dish.status = newStatus;
-        this.$message.success(newStatus === 1 ? '菜品已上架' : '菜品已下架');
+        this.$message.success(newStatus === 1 ? '菜品已上架' : '菜品已售罄');
       }
     },
 

@@ -94,6 +94,12 @@ public class Shop {
     private String shopImages;
 
     /**
+     * 驳回原因 - 用于记录审核不通过的具体理由
+     * 对应数据库字段: reject_reason
+     */
+    private String rejectReason;
+
+    /**
      * 创建时间 - 记录店铺入驻申请时间
      */
     private LocalDateTime createTime;
@@ -271,6 +277,16 @@ public class Shop {
 
     public Double getDistance() {
         return distance;
+    }
+
+    // 获取驳回原因
+    public String getRejectReason() {
+        return rejectReason;
+    }
+
+    // 设置驳回原因
+    public void setRejectReason(String rejectReason) {
+        this.rejectReason = rejectReason;
     }
 
     public void setDistance(Double distance) {

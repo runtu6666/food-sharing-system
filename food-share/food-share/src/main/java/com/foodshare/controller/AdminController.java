@@ -99,16 +99,19 @@ public class AdminController {
     @PostMapping("/shops/approve")
     public Result approveShop(@RequestBody Map<String, Object> params) {
         Long id = Long.valueOf(params.get("id").toString());
-        userMapper.updateShopStatus(id, 1);
+        userMapper.updateShopStatus(id, 1, null);
         return Result.success("操作成功");
     }
 
-    // 拒绝商家申请：将店铺状态改为-1（拒绝）
+    // 拒绝商家申请：将店铺状态改为-1（拒绝），并记录驳回原因
     @PostMapping("/shops/reject")
     public Result rejectShop(@RequestBody Map<String, Object> params) {
         Long id = Long.valueOf(params.get("id").toString());
-        // 复用updateShopStatus方法，状态-1表示拒绝
-        userMapper.updateShopStatus(id, -1);
+        // 安全获取前端传来的驳回原因
+        String rejectReason = params.get("rejectReason") != null ? params.get("rejectReason").toString() : "资料不符，请重新核对";
+
+        // 调用刚才新建的带原因的更新方法
+        userMapper.updateShopStatus(id, -1, rejectReason);
         return Result.success("已拒绝");
     }
 

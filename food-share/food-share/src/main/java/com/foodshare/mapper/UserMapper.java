@@ -94,8 +94,9 @@ public interface UserMapper {
     @Select("SELECT * FROM shop WHERE status=0")
     List<Map<String, Object>> findPendingShops();
 
-    @Update("UPDATE shop SET status=#{status} WHERE id=#{id}")
-    void updateShopStatus(Long id, Integer status);
+    // 加上 reject_reason 字段，并给参数加上 @Param 注解防止 MyBatis 报错
+    @Update("UPDATE shop SET status=#{status}, reject_reason=#{rejectReason} WHERE id=#{id}")
+    void updateShopStatus(@Param("id") Long id, @Param("status") Integer status, @Param("rejectReason") String rejectReason);
 
     // 查询所有已审批的商家（包含正常和封禁状态，不包含待审核和已拒绝），支持按店名或地址模糊搜索
     @Select("<script>" +
