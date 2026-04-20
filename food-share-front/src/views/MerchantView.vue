@@ -257,6 +257,7 @@
             </div>
 
             <button class="save-btn" @click="doUpdate">保存修改</button>
+            <button class="delete-shop-btn" @click="handleDeleteShop(myShop)">注销店铺 (危险操作)</button>
           </div>
         </div>
 
@@ -827,6 +828,28 @@ export default {
           (shop.shopImages || shop.shop_images).split('|||') : [];
 
       this.loadShopData()
+    },
+
+    // 商家注销店铺并解绑所有关联的评价与笔记
+    async handleDeleteShop(shop) {
+      if (!confirm(`确认要永久注销店铺“${shop.name}”吗？关联的评价数据将被清除。`)) return;
+
+      const res = await this.$axios.post('/shop/delete', null, {
+        params: {
+          shopId: shop.id,
+          userId: this.user.id
+        }
+      });
+
+      if (res.data.code === 200) {
+        this.$message.success('店铺注销成功');
+        if (this.myShop && this.myShop.id === shop.id) {
+          this.myShop = null; // 重置视图状态
+        }
+        this.loadMyShop();
+      } else {
+        this.$message.error(res.data.message || '注销请求失败');
+      }
     },
 
     loadShopData() {
@@ -1766,6 +1789,23 @@ export default {
   width: 100%; padding: 12px; border: none; border-radius: 10px;
   background: linear-gradient(135deg, #ff6b35, #f7931e);
   color: white; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.delete-shop-btn {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ffa39e;
+  border-radius: 10px;
+  background: #fff1f0;
+  color: #ff4d4f;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 12px;
+  transition: all 0.2s;
+}
+.delete-shop-btn:hover {
+  background: #ff4d4f;
+  color: white;
 }
 
 /* 右侧面板 */

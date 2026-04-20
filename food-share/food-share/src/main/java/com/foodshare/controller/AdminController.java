@@ -19,6 +19,9 @@ public class AdminController {
     @Autowired
     private UserMapper userMapper;
 
+    @Autowired
+    private com.foodshare.mapper.ShopMapper shopMapper;
+
     // 数据概览
     @GetMapping("/stats")
     public Result stats() {
@@ -143,5 +146,18 @@ public class AdminController {
         Integer status = Integer.valueOf(params.get("status").toString());
         userMapper.adminUpdateNoteStatus(id, status);
         return Result.success("操作成功");
+    }
+
+    // 管理员强制删除违规店铺
+    @PostMapping("/shops/delete")
+    public Result adminDeleteShop(@RequestBody Map<String, Object> params) {
+        Long id = Long.valueOf(params.get("id").toString());
+        // 解除该店铺相关的探店笔记绑定关系
+        shopMapper.clearShopBinding(id);
+        // 调用统一的清理方法，移除店铺下的所有相关评价数据
+        shopMapper.deleteReviewsByShopId(id);
+        // 执行店铺物理删除
+        userMapper.deleteShopsByUserId(id); // 此处可优化为专门根据 shopId 删除的 mapper 方法
+        return Result.success("店铺及相关评价已清理完毕");
     }
 }

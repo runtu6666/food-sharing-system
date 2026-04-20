@@ -590,12 +590,15 @@
           {{ shop.status === 2 ? '已封禁' : '正常' }}
         </span>
                 <!-- 封禁/解封按钮 -->
+                <div style="display: flex; gap: 8px;">
                 <button
                     :class="['shop-ban-btn', shop.status === 2 ? 'btn-unban' : 'btn-ban']"
                     @click="toggleShopBan(shop)"
                 >
                   {{ shop.status === 2 ? '解封' : '封禁' }}
                 </button>
+                  <button class="shop-ban-btn btn-ban" @click="handleAdminDeleteShop(shop)">彻底删除</button>
+                </div>
               </div>
 
             </div>
@@ -981,6 +984,19 @@ export default {
         } else {
           this.$message.error(res.data.message || '解封失败');
         }
+      }
+    },
+
+    // 管理员执行违规店铺的强制下架和物理删除
+    async handleAdminDeleteShop(shop) {
+      if (!confirm(`即将执行最高权限操作：永久删除店铺“${shop.name}”，该操作不可恢复！继续吗？`)) return;
+
+      const res = await this.$axios.post('/admin/shops/delete', { id: shop.id });
+      if (res.data.code === 200) {
+        this.$message.success('店铺清理完成');
+        this.loadAllShops();
+      } else {
+        this.$message.error(res.data.message || '操作未完成');
       }
     },
 
