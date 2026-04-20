@@ -301,11 +301,11 @@ export default {
   // 监听路由变化：每次切换回首页时重新加载笔记列表
   // 这样从详情页返回后，点赞状态和数量都是最新的
   watch: {
-    // 监听搜索词变化：清空输入框后，自动恢复显示全部无过滤条件的数据
+    // 监听搜索词变化：清空搜索框时自动恢复显示全部数据
     searchKey(newVal) {
       if (newVal === '') {
+        this.page = 1;
         if (this.searchType === 'note') {
-          this.page = 1;
           this.loadNotes();
         } else {
           this.getUserLocationAndFetchShops();
@@ -320,6 +320,16 @@ export default {
     }
     this.loadCategories();
     // 根据初始化的页面模式，动态分发底层网络请求
+    if (this.searchType === 'note') {
+      this.loadNotes();
+    } else {
+      this.getUserLocationAndFetchShops();
+    }
+  },
+
+  activated() {
+    // 只要页面从其他地方切换回来，必然触发这里，强制重置并拉取最新数据
+    this.page = 1;
     if (this.searchType === 'note') {
       this.loadNotes();
     } else {
@@ -345,7 +355,8 @@ export default {
             sort: this.sortType,                      // 排序方式
             keyword: this.searchKey,                  // 搜索关键词
             page: this.page,                          // 页码
-            userId: this.user.id                      // 当前用户ID，用于判断是否已点赞
+            userId: this.user.id,                      // 当前用户ID，用于判断是否已点赞
+            t: Date.now()                             // 加时间戳，打穿浏览器缓存
           }
         })
         if (res.data.code === 200) {
@@ -455,7 +466,8 @@ export default {
             lat: this.userLat,
             radius: 100000, // 设定搜索半径，方便在测试数据较少时能查出结果
             keyword: this.searchKey, // 传入顶部搜索框的店名关键词进行模糊匹配
-            categoryId: this.selectedCategory || '' // 传入左侧选中的分类ID（0或空代表全部分类）
+            categoryId: this.selectedCategory || '', // 传入左侧选中的分类ID（0或空代表全部分类）
+            t: Date.now() // 加时间戳，打穿浏览器缓存
           }
         });
         if (res.data.code === 200) {

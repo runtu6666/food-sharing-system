@@ -60,7 +60,7 @@ public interface NoteMapper {
             "(SELECT COUNT(*) FROM likes WHERE note_id = n.id AND user_id = #{userId}) AS liked, " +
             "(SELECT COUNT(*) FROM collect WHERE note_id = n.id AND user_id = #{userId}) AS collected " +
             "FROM note n LEFT JOIN user u ON n.user_id = u.id " +
-            "WHERE n.id = #{id}")
+            "WHERE n.id = #{id} AND (n.status = 1 OR n.user_id = #{userId})") // 增加了状态保护逻辑
     Map<String, Object> findById(@Param("id") Long id, @Param("userId") Long userId);
 
     /**

@@ -216,6 +216,7 @@ export default {
       // 表单数据
       coverIndex: 0,  // 封面图片的下标，默认第一张
       form: {
+        id: null,           // 记录笔记ID，区分是发布还是修改
         title: '',          // 笔记标题
         content: '',        // 正文内容
         images: [],         // 图片列表（base64或URL）
@@ -239,6 +240,12 @@ export default {
       return
     }
     this.loadCategories()
+
+    // 如果是编辑模式，获取ID并拉取旧数据回显
+    const editId = this.$route.query.id;
+    if (editId) {
+      this.loadEditNote(editId);
+    }
   },
   methods: {
     // 加载美食分类列表
@@ -246,6 +253,25 @@ export default {
       const res = await this.$axios.get('/category/list')
       if (res.data.code === 200) {
         this.categories = res.data.data
+      }
+    },
+
+    // 拉取要编辑的笔记详情
+    async loadEditNote(id) {
+      const res = await this.$axios.get(`/note/detail/${id}`);
+      if (res.data.code === 200) {
+        const data = res.data.data;
+        // 将旧数据填入表单
+        this.form = {
+          id: data.id,
+          title: data.title,
+          content: data.content,
+          images: data.images ? data.images.split('|||') : [],
+          score: data.score,
+          categoryId: data.categoryId,
+          shopId: data.shopId
+        };
+        this.selectedShopName = data.shopName;
       }
     },
 
@@ -347,16 +373,20 @@ export default {
       }
       this.loading = true
       try {
-        const res = await this.$axios.post('/note/publish', {
+        // 根据表单中是否包含笔记 ID，来判断当前是“修改”还是“全新发布”
+        const requestUrl = this.form.id ? '/note/update' : '/note/publish';
+
+        const res = await this.$axios.post(requestUrl, {
+          id: this.form.id, // 把笔记ID传给后端，如果是发布新笔记这里就是null，后端会自动忽略
           userId: this.user.id,
           title: this.form.title,
           content: this.form.content,
-          // 多张图片用逗号拼接存储
           images: this.form.images.join('|||'),
           score: this.form.score,
           categoryId: this.form.categoryId,
           shopId: this.form.shopId
         })
+
         if (res.data.code === 200) {
           // 动态读取后端 Result.success() 传过来的 message 字段
           this.$message.success(res.data.message)
