@@ -181,11 +181,11 @@
 
         <!-- 左侧：店铺信息 -->
         <div class="shop-info-card">
-        <div :class="['shop-status-banner', myShop.status === 1 ? 'approved' : (myShop.status === 2 ? 'banned' : (myShop.status === -1 ? 'rejected' : 'pending'))]">
-          {{ myShop.status === 1 ? '✅ 已通过审核，正常营业中' :
-            (myShop.status === 2 ? '🚫 该店铺已被封禁！请修改重新提交，或联系管理员申诉: 15154797270@163.com' :
-                (myShop.status === -1 ? `❌ 审核已拒绝：${myShop.rejectReason || myShop.reject_reason || '资料不符'}。请修改后重新提交` : '⏳ 审核中，请耐心等待')) }}
-        </div>
+          <div :class="['shop-status-banner', myShop.status === 1 ? 'approved' : (myShop.status === 2 ? 'banned' : (myShop.status === -1 ? 'rejected' : 'pending'))]">
+            {{ myShop.status === 1 ? '✅ 已通过审核，正常营业中' :
+              (myShop.status === 2 ? ('🚫 该店铺已被封禁！原因：' + (myShop.rejectReason || myShop.reject_reason || '严重违规') + '。请联系管理员申诉: 15154797270@163.com') :
+                  (myShop.status === -1 ? ('❌ 审核已拒绝：' + (myShop.rejectReason || myShop.reject_reason || '资料不符') + '。请修改后重新提交') : '⏳ 审核中，请耐心等待')) }}
+          </div>
 
           <div class="shop-detail">
             <h2 class="shop-name">{{ myShop.name }}</h2>
@@ -209,7 +209,7 @@
             </div>
           </div>
 
-          <div class="edit-section">
+          <div class="edit-section" v-if="myShop.status !== 2">
             <h3>修改店铺信息</h3>
             <div class="form-item">
               <label>联系电话</label>
@@ -261,7 +261,19 @@
         </div>
 
         <!-- 右侧：Tab切换 -->
-        <div class="right-panel">
+        <div class="right-panel" v-if="myShop.status === 2" style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fffafb; border: 1px solid #ffccc7;">
+          <div style="font-size: 80px; margin-bottom: 20px;">🚫</div>
+          <h2 style="color: #ff4d4f; margin-bottom: 12px;">店铺已被封禁，功能已全面冻结</h2>
+          <p style="color: #888; font-size: 15px;">您的店铺由于违规已被封禁，暂无法进行菜品管理、修改信息及回复评论等任何操作。</p>
+          <div style="margin-top: 24px; padding: 12px 24px; background: #fff1f0; color: #cf1322; border-radius: 8px; font-size: 14px; max-width: 80%;">
+            <b>封禁原因：</b>{{ myShop.rejectReason || myShop.reject_reason || '严重违规' }}
+          </div>
+          <button class="save-btn" style="margin-top: 30px; width: 200px; background: #ff4d4f;" @click="$message.error('当前状态已锁定，点击任何功能均无效')">
+            操作已冻结
+          </button>
+        </div>
+
+        <div class="right-panel" v-if="myShop.status !== 2">
           <div class="tab-nav">
             <div :class="['tab-item', activeTab === 'dishes' ? 'active' : '']" @click="activeTab = 'dishes'">
               🍽️ 菜品管理
@@ -823,6 +835,28 @@ export default {
       this.loadShopDishes() // 触发加载菜品列表
     },
 
+    // 实时探测店铺状态（前端热更新）
+    async checkShopStatusHot() {
+      if (!this.myShop) return true;
+
+      // 极速拉取当前店铺的最新详情
+      const res = await this.$axios.get('/shop/detail', { params: { id: this.myShop.id } });
+      if (res.data.code === 200) {
+        const latestStatus = res.data.data.status;
+
+        // 如果后端状态已经是封禁(2)，但前端内存里还不是 2
+        if (latestStatus === 2 && this.myShop.status !== 2) {
+          // 瞬间触发热更新：强制修改内存状态！
+          // 瞬间隐藏所有表单并弹出红牌拦截面板
+          this.myShop.status = 2;
+          this.myShop.rejectReason = res.data.data.rejectReason;
+          this.$message.error('系统检测到您的店铺刚刚已被管理员封禁，操作已强制阻断！');
+          return false; // 返回 false，直接掐死接下来的写入操作
+        }
+      }
+      return true; // 状态正常，放行
+    },
+
     async loadShopNotes() {
       const res = await this.$axios.get('/note/byShop', {
         params: { shopId: this.myShop.id }
@@ -1026,6 +1060,8 @@ export default {
 
     // 真正发送更新请求给后端
     async doUpdate() {
+      // 热更新拦截
+      if (!(await this.checkShopStatusHot())) return;
       // 校验：不能把图片全删光
       if (!this.editForm.shopImages || this.editForm.shopImages.length === 0) {
         this.$message.warning('请至少保留一张店铺照片！');
@@ -1074,6 +1110,8 @@ export default {
     },
 
     async doReply(noteId) {
+      // 热更新拦截
+      if (!(await this.checkShopStatusHot())) return;
       // 校验回复内容不能为空
       if (!this.replyText.trim()) {
         this.$message.warning('请输入回复内容')
@@ -1199,6 +1237,8 @@ export default {
 
     // 提交菜品表单数据至服务端保存
     async saveDish() {
+      //热更新拦截
+      if (!(await this.checkShopStatusHot())) return;
       if (!this.dishForm.name || !this.dishForm.price) {
         this.$message.warning('菜品名称和价格不能为空');
         return;
@@ -1216,20 +1256,32 @@ export default {
 
     // 切换菜品的上下架状态并即时同步至数据库
     async toggleDishStatus(dish) {
+      // 提交前实时探测店铺状态，若已被封禁则直接阻断操作
+      if (this.checkShopStatusHot && !(await this.checkShopStatusHot())) return;
+
+      // 状态反转：1为售卖中，0为已售罄/下架
       const newStatus = dish.status === 1 ? 0 : 1;
+
+      // 发起状态更新请求
       const res = await this.$axios.post('/dish/save', {
-        id: dish.id,
-        shopId: dish.shopId,
-        status: newStatus
+        ...dish,                // 【终极修复】：通过展开语法，把菜品原有的名称、价格、图片全部带上！
+        shopId: this.myShop.id, // 强绑定店铺ID
+        status: newStatus       // 覆盖最新状态
       });
+
+      // 更新成功后，同步修改前端列表里的状态
       if (res.data.code === 200) {
         dish.status = newStatus;
         this.$message.success(newStatus === 1 ? '菜品已上架' : '菜品已售罄');
+      } else {
+        this.$message.error(res.data.message || '操作失败');
       }
     },
 
     // 提交菜品主键ID至服务端执行物理删除
     async deleteDish(id) {
+      // 热更新拦截
+      if (!(await this.checkShopStatusHot())) return;
       if (!confirm('确定要删除这个菜品吗？')) return;
       const res = await this.$axios.delete(`/dish/delete/${id}`);
       if (res.data.code === 200) {

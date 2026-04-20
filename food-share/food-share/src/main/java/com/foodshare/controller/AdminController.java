@@ -126,7 +126,13 @@ public class AdminController {
     public Result banShop(@RequestBody Map<String, Object> params) {
         Long id = Long.valueOf(params.get("id").toString());
         Integer status = Integer.valueOf(params.get("status").toString());
-        userMapper.updateShopBanStatus(id, status);
+
+        // 安全获取前端传来的封禁原因，如果是解封则默认为空字符串
+        String rejectReason = params.get("rejectReason") != null ? params.get("rejectReason").toString() : "";
+
+        // 更新店铺状态并同步记录原因
+        userMapper.updateShopStatus(id, status, rejectReason);
+
         return Result.success("操作成功");
     }
 

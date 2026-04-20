@@ -938,12 +938,50 @@ export default {
 
     // 封禁/解封商家
     async toggleShopBan(shop) {
-      // status=2表示封禁，status=1表示正常
-      const newStatus = shop.status === 2 ? 1 : 2
-      await this.$axios.post('/admin/shops/ban', { id: shop.id, status: newStatus })
-      this.$message.success(newStatus === 2 ? '已封禁该商家' : '已解封该商家')
-      // 重新加载商家列表刷新状态
-      this.loadAllShops()
+      const newStatus = shop.status === 2 ? 1 : 2;
+
+      // 如果是执行封禁操作 (newStatus === 2)，弹出输入原因的对话框
+      if (newStatus === 2) {
+        try {
+          const { value } = await this.$prompt('请输入封禁该店铺的具体原因', '🚫 封禁确认', {
+            confirmButtonText: '确定封禁',
+            cancelButtonText: '取消',
+            inputPattern: /\S/,
+            inputErrorMessage: '封禁原因不能为空'
+          });
+
+          // 发送请求，这里我们复用 rejectReason 字段传给后端
+          const res = await this.$axios.post('/admin/shops/ban', {
+            id: shop.id,
+            status: newStatus,
+            rejectReason: value // 把封禁原因发给后端
+          });
+
+          if (res.data.code === 200) {
+            this.$message.success('已封禁该商家');
+            this.loadAllShops();
+          } else {
+            this.$message.error(res.data.message || '封禁失败');
+          }
+        } catch (error) {
+          this.$message.info('已取消封禁操作');
+        }
+      } else {
+        // 如果是解封操作 (newStatus === 1)，直接确认即可，不需要填原因
+        if (!confirm(`确定要解封店铺“${shop.name}”吗？`)) return;
+
+        const res = await this.$axios.post('/admin/shops/ban', {
+          id: shop.id,
+          status: newStatus
+        });
+
+        if (res.data.code === 200) {
+          this.$message.success('已解封该商家');
+          this.loadAllShops();
+        } else {
+          this.$message.error(res.data.message || '解封失败');
+        }
+      }
     },
 
     // ==================== 敏感词风控管理 ====================
