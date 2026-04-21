@@ -407,6 +407,7 @@ export default {
       noteShopKeyword: '',      // 笔记编辑弹窗中的店铺搜索词
       noteShopList: [],         // 笔记编辑弹窗中的店铺搜索结果
       noteSelectedShopName: '', // 笔记编辑弹窗中已选店铺名
+      originalNotePayloadStr: '', // 用来存绝对标准化的 JSON 字符串快照
     }
   },
   computed: {
@@ -446,6 +447,18 @@ export default {
   },
   methods: {
     // 加载分类列表：编辑笔记时用于选择“所属美食分类”
+    // 数据清洗与格式化，屏蔽浏览器的隐形转换干扰
+    generateNotePayloadStr() {
+      return JSON.stringify({
+        title: String(this.noteForm.title || '').trim(),
+        content: String(this.noteForm.content || '').trim().replace(/\r\n/g, '\n'),
+        score: Number(this.noteForm.score || 5),
+        categoryId: this.noteForm.categoryId ? Number(this.noteForm.categoryId) : null,
+        shopId: this.noteForm.shopId ? Number(this.noteForm.shopId) : null,
+        images: (this.noteForm.images || []).join('|||')
+      });
+    },
+
     async loadCategories() {
       const res = await this.$axios.get('/category/list')
       if (res.data.code === 200) this.categories = res.data.data
@@ -535,6 +548,8 @@ export default {
       this.noteShopKeyword = ''
       this.noteShopList = []
       this.showNoteModal = true
+      // 数据填入表单后，立刻洗干净并拍下死快照
+      this.originalNotePayloadStr = this.generateNotePayloadStr()
     },
 
     // 笔记编辑弹窗中上传图片：沿用发布笔记的多图上传方式
@@ -595,6 +610,14 @@ export default {
 
     // 保存笔记修改：只允许修改自己的笔记
     async saveNote() {
+      // 拦截器逻辑，对比当前表单和快照
+      if (this.originalNotePayloadStr) {
+        if (this.generateNotePayloadStr() === this.originalNotePayloadStr) {
+          this.$message.warning('您未做任何修改，无需重复提交审核');
+          this.showNoteModal = false; // 直接关闭弹窗
+          return; // 强制中断，不发请求
+        }
+      }
       if (!this.noteForm.title.trim() || !this.noteForm.content.trim()) {
         this.$message.warning('标题和内容不能为空')
         return

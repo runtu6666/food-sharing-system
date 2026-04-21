@@ -223,7 +223,7 @@ export default {
         score: 5,           // 评分，默认5星
         categoryId: null,   // 分类ID
         shopId: null        // 关联的店铺ID
-      }
+      },
     }
   },
   computed: {
@@ -240,13 +240,8 @@ export default {
       return
     }
     this.loadCategories()
-
-    // 如果是编辑模式，获取ID并拉取旧数据回显
-    const editId = this.$route.query.id;
-    if (editId) {
-      this.loadEditNote(editId);
-    }
   },
+
   methods: {
     // 加载美食分类列表
     async loadCategories() {
@@ -256,23 +251,17 @@ export default {
       }
     },
 
-    // 拉取要编辑的笔记详情
-    async loadEditNote(id) {
-      const res = await this.$axios.get(`/note/detail/${id}`);
-      if (res.data.code === 200) {
-        const data = res.data.data;
-        // 将旧数据填入表单
-        this.form = {
-          id: data.id,
-          title: data.title,
-          content: data.content,
-          images: data.images ? data.images.split('|||') : [],
-          score: data.score,
-          categoryId: data.categoryId,
-          shopId: data.shopId
-        };
-        this.selectedShopName = data.shopName;
-      }
+    // 数据清洗与格式化方法
+    generatePayloadStr() {
+      return JSON.stringify({
+        title: String(this.form.title || '').trim(),
+        // 把后端可能带的 \r\n 全部统一成 \n，彻底消灭浏览器底层转换带来的差异
+        content: String(this.form.content || '').trim().replace(/\r\n/g, '\n'),
+        score: Number(this.form.score || 5),
+        categoryId: this.form.categoryId ? Number(this.form.categoryId) : null,
+        shopId: this.form.shopId ? Number(this.form.shopId) : null,
+        images: this.form.images.join('|||')
+      });
     },
 
     // 触发文件选择框
@@ -362,6 +351,7 @@ export default {
 
     // 发布笔记：校验 → 提交到后端
     async doPublish() {
+
       // 基础校验
       if (!this.form.title.trim()) {
         this.$message.warning('请填写笔记标题')
@@ -373,11 +363,7 @@ export default {
       }
       this.loading = true
       try {
-        // 根据表单中是否包含笔记 ID，来判断当前是“修改”还是“全新发布”
-        const requestUrl = this.form.id ? '/note/update' : '/note/publish';
-
-        const res = await this.$axios.post(requestUrl, {
-          id: this.form.id, // 把笔记ID传给后端，如果是发布新笔记这里就是null，后端会自动忽略
+        const res = await this.$axios.post('/note/publish', {
           userId: this.user.id,
           title: this.form.title,
           content: this.form.content,
