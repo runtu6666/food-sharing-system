@@ -4,11 +4,16 @@ import com.foodshare.common.Result;
 import com.foodshare.entity.Note;
 import com.foodshare.entity.Comment;
 import com.foodshare.entity.Shop;
+import com.foodshare.mapper.HotSearchMapper;
 import com.foodshare.mapper.NoteMapper;
+import com.foodshare.mapper.SearchHistoryMapper;
 import com.foodshare.mapper.UserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.util.List;
 import java.util.Map;
 
@@ -29,6 +34,40 @@ public class NoteController {
 
     @Autowired
     private com.foodshare.utils.DFAFilterUtil dfaFilterUtil;
+
+    @Autowired
+    private SearchHistoryMapper searchHistoryMapper;
+
+    @Autowired
+    private HotSearchMapper hotSearchMapper;
+
+    @Autowired
+    private DataSource dataSource;
+
+    /**
+     * 工具方法：插入一条站内通知
+     * @param userId   接收通知的用户ID
+     * @param type     通知类型（1点赞 2评论 3审核通过 4审核驳回 5系统公告）
+     * @param title    通知标题
+     * @param content  通知内容
+     * @param targetId 关联目标ID（笔记ID等）
+     */
+    private void insertNotification(Long userId, int type, String title, String content, Long targetId) {
+        try (Connection conn = dataSource.getConnection()) {
+            PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO notification (user_id, type, title, content, target_id, is_read, create_time) " +
+                            "VALUES (?, ?, ?, ?, ?, 0, NOW())");
+            ps.setLong(1, userId);
+            ps.setInt(2, type);
+            ps.setString(3, title);
+            ps.setString(4, content);
+            ps.setObject(5, targetId);
+            ps.executeUpdate();
+        } catch (Exception e) {
+            // 通知写入失败不影响主业务
+            System.err.println("通知写入失败: " + e.getMessage());
+        }
+    }
 
     // ==================== 笔记查询接口 ====================
 
@@ -66,6 +105,12 @@ public class NoteController {
 
         // 计算分页偏移量(第1页offset=0, 第2页offset=12)
         int offset = (page - 1) * 12;
+
+        // 如果有搜索关键词，记录搜索历史和更新热搜统计
+        if (keyword != null && !keyword.trim().isEmpty() && userId != null) {
+            searchHistoryMapper.insert(userId, keyword.trim(), 1);
+            hotSearchMapper.upsert(keyword.trim());
+        }
 
         // 查询笔记列表
         List<Map<String, Object>> notes = noteMapper.findNotes(categoryId, keyword, sort, shopId, offset, userId);
@@ -342,9 +387,25 @@ public class NoteController {
             noteMapper.deleteLike(noteId, userId);
             noteMapper.updateLikeCount(noteId, -1);
         } else {
-            // 未点赞 → 添加点赞
+            // 未点赞 → 添加点赞，同时给笔记作者发通知
             noteMapper.insertLike(noteId, userId);
             noteMapper.updateLikeCount(noteId, 1);
+            // 查询笔记作者ID和当前用户昵称，发送点赞通知
+            try {
+                Map<String, Object> noteInfo = noteMapper.findNoteAuthorInfo(noteId);
+                if (noteInfo != null) {
+                    Long authorId = Long.valueOf(noteInfo.get("userId").toString());
+                    String noteTitle = noteInfo.get("title") != null ? noteInfo.get("title").toString() : "你的笔记";
+                    String liker = noteMapper.findUserNickname(userId);
+                    // 不给自己发通知
+                    if (!authorId.equals(userId)) {
+                        insertNotification(authorId, 1, "收到新点赞",
+                                (liker != null ? liker : "有人") + " 点赞了你的笔记《" + noteTitle + "》", noteId);
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("点赞通知发送失败: " + e.getMessage());
+            }
         }
 
         return Result.success("操作成功");
@@ -439,6 +500,23 @@ public class NoteController {
 
         // 插入评论
         noteMapper.insertComment(comment);
+
+        // 给笔记作者发送评论通知
+        try {
+            Map<String, Object> noteInfo = noteMapper.findNoteAuthorInfo(comment.getNoteId());
+            if (noteInfo != null) {
+                Long authorId = Long.valueOf(noteInfo.get("userId").toString());
+                String noteTitle = noteInfo.get("title") != null ? noteInfo.get("title").toString() : "你的笔记";
+                String commenter = noteMapper.findUserNickname(comment.getUserId());
+                // 不给自己发通知
+                if (!authorId.equals(comment.getUserId())) {
+                    insertNotification(authorId, 2, "收到新评论",
+                            (commenter != null ? commenter : "有人") + " 评论了你的笔记《" + noteTitle + "》：" + comment.getContent(), comment.getNoteId());
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("评论通知发送失败: " + e.getMessage());
+        }
 
         return Result.success("评论成功");
     }

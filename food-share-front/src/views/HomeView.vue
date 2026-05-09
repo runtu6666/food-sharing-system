@@ -36,8 +36,44 @@
               v-model="searchKey"
               :placeholder="searchType === 'note' ? '搜索您感兴趣的美食笔记...' : '输入店名，查找周边美食店铺...'"
               @keyup.enter="doSearch"
+              @focus="showSearchPanel = true"
+              @blur="onSearchBlur"
           />
           <button class="search-btn" @click="doSearch">搜索</button>
+        </div>
+
+        <!-- 搜索历史和热搜词下拉面板 -->
+        <div class="search-dropdown" v-show="showSearchPanel && searchKey === ''">
+          <!-- 搜索历史 -->
+          <div v-if="searchHistory.length > 0" class="search-panel-section">
+            <div class="search-panel-header">
+              <span>🕐 最近搜索</span>
+              <span class="clear-history-btn" @mousedown.prevent="clearHistory">清空</span>
+            </div>
+            <div class="search-tags">
+              <span
+                  v-for="kw in searchHistory"
+                  :key="kw"
+                  class="search-tag"
+                  @mousedown.prevent="pickKeyword(kw)"
+              >{{ kw }}</span>
+            </div>
+          </div>
+          <!-- 热搜词 -->
+          <div v-if="hotSearchList.length > 0" class="search-panel-section">
+            <div class="search-panel-header">🔥 热搜榜</div>
+            <div class="search-tags">
+              <span
+                  v-for="(item, index) in hotSearchList"
+                  :key="item.keyword"
+                  class="search-tag hot"
+                  @mousedown.prevent="pickKeyword(item.keyword)"
+              >
+                <span class="hot-rank" :class="index < 3 ? 'top3' : ''">{{ index + 1 }}</span>
+                {{ item.keyword }}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -108,6 +144,29 @@
 
       <!-- 右侧主内容区 -->
       <div class="main-content">
+
+        <!-- 系统公告横幅 -->
+        <div v-if="announcements.length > 0" class="announcement-banner">
+          <span class="announcement-icon">📢</span>
+          <div class="announcement-scroll">
+            <span
+                v-for="(ann, idx) in announcements"
+                :key="ann.id"
+                class="announcement-item"
+                @click="showAnnouncement(ann)"
+            >{{ ann.title }}<span v-if="idx < announcements.length - 1" style="margin: 0 12px; opacity: 0.4;">|</span></span>
+          </div>
+        </div>
+
+        <!-- 公告详情弹窗 -->
+        <div v-if="annDialogVisible" class="ann-dialog-mask" @click.self="annDialogVisible = false">
+          <div class="ann-dialog">
+            <div class="ann-dialog-title">📢 {{ currentAnn.title }}</div>
+            <div class="ann-dialog-content">{{ currentAnn.content }}</div>
+            <div class="ann-dialog-time">发布时间：{{ currentAnn.createTime }}</div>
+            <button class="ann-dialog-close" @click="annDialogVisible = false">关闭</button>
+          </div>
+        </div>
 
         <!-- 顶部筛选栏 -->
         <div class="filter-bar" v-show="searchType === 'note'">
@@ -288,7 +347,15 @@ export default {
       mapMarkers: [],      // 存放所有的地图坐标点，方便清理
       showPreview: false,     // 是否展示全屏图片预览
       previewList: [],        // 全屏预览的图片数组
-      previewIndex: 0         // 当前预览的图片索引
+      previewIndex: 0,        // 当前预览的图片索引
+      // 搜索面板
+      showSearchPanel: false,   // 是否显示搜索历史/热搜下拉面板
+      searchHistory: [],        // 用户搜索历史
+      hotSearchList: [],        // 热搜词TOP10
+      // 系统公告
+      announcements: [],        // 首页展示的公告列表
+      annDialogVisible: false,  // 公告详情弹窗
+      currentAnn: {}            // 当前查看的公告
     }
   },
   computed: {
@@ -320,6 +387,9 @@ export default {
       return;
     }
     this.loadCategories();
+    this.loadAnnouncements();
+    this.loadHotSearch();
+    this.loadSearchHistory();
     // 根据初始化的页面模式，动态分发底层网络请求
     if (this.searchType === 'note') {
       this.loadNotes();
@@ -338,6 +408,59 @@ export default {
     }
   },
   methods: {
+    // 加载系统公告
+    async loadAnnouncements() {
+      try {
+        const res = await this.$axios.get('/announcement/list')
+        if (res.data.code === 200) this.announcements = res.data.data
+      } catch (e) { /* 公告加载失败不影响主流程 */ }
+    },
+
+    // 显示公告详情弹窗
+    showAnnouncement(ann) {
+      this.currentAnn = ann
+      this.annDialogVisible = true
+    },
+
+    // 加载热搜词TOP10
+    async loadHotSearch() {
+      try {
+        const res = await this.$axios.get('/search/hot')
+        if (res.data.code === 200) this.hotSearchList = res.data.data
+      } catch (e) { /* 热搜加载失败不影响主流程 */ }
+    },
+
+    // 加载当前用户的搜索历史
+    async loadSearchHistory() {
+      if (!this.user || !this.user.id) return
+      try {
+        const res = await this.$axios.get('/search/history', { params: { userId: this.user.id } })
+        if (res.data.code === 200) this.searchHistory = res.data.data
+      } catch (e) { /* 搜索历史加载失败不影响主流程 */ }
+    },
+
+    // 清空搜索历史
+    async clearHistory() {
+      if (!this.user || !this.user.id) return
+      try {
+        await this.$axios.delete('/search/history/clear', { params: { userId: this.user.id } })
+        this.searchHistory = []
+        this.$message.success('搜索历史已清空')
+      } catch (e) { this.$message.error('清空失败') }
+    },
+
+    // 点击历史/热搜关键词，直接填入搜索框并触发搜索
+    pickKeyword(kw) {
+      this.searchKey = kw
+      this.showSearchPanel = false
+      this.doSearch()
+    },
+
+    // 搜索框失焦时关闭下拉面板（延迟100ms防止点击选项时先触发blur）
+    onSearchBlur() {
+      setTimeout(() => { this.showSearchPanel = false }, 150)
+    },
+
     // 加载美食分类列表
     async loadCategories() {
       const res = await this.$axios.get('/category/list')
@@ -420,12 +543,15 @@ export default {
     // 触发搜索操作
     doSearch() {
       if (this.searchType === 'note') {
-        // 笔记模式下：按关键词重新从第一页拉取数据
         this.page = 1
         this.loadNotes()
       } else {
-        // 店铺模式下：重新获取位置并计算附近店铺
         this.getUserLocationAndFetchShops();
+      }
+      this.showSearchPanel = false
+      // 搜索后刷新历史
+      if (this.searchKey.trim()) {
+        setTimeout(() => this.loadSearchHistory(), 500)
       }
     },
 
@@ -1403,5 +1529,129 @@ export default {
 @keyframes fadeUp {
   0% { opacity: 0; transform: translateY(10px); }
   100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== 搜索历史/热搜下拉面板 ===== */
+.nav-search-container { position: relative; }
+.search-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0; right: 0;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  z-index: 999;
+  padding: 14px 16px;
+  border: 1px solid #f0f0f0;
+}
+.search-panel-section { margin-bottom: 12px; }
+.search-panel-section:last-child { margin-bottom: 0; }
+.search-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 8px;
+}
+.clear-history-btn {
+  font-size: 12px;
+  color: #aaa;
+  cursor: pointer;
+  font-weight: 400;
+}
+.clear-history-btn:hover { color: #ff6b35; }
+.search-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.search-tag {
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: #f5f5f5;
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.search-tag:hover { background: #ffe8de; color: #ff6b35; }
+.search-tag.hot { background: #fff4f0; }
+.hot-rank {
+  font-size: 11px;
+  font-weight: 700;
+  color: #bbb;
+  min-width: 14px;
+}
+.hot-rank.top3 { color: #ff6b35; }
+
+/* ===== 系统公告横幅 ===== */
+.announcement-banner {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(135deg, #fff8f0, #fff3e8);
+  border: 1px solid #ffd9b8;
+  border-radius: 10px;
+  padding: 10px 16px;
+  margin-bottom: 14px;
+  gap: 10px;
+  overflow: hidden;
+}
+.announcement-icon { font-size: 16px; flex-shrink: 0; }
+.announcement-scroll { display: flex; flex-wrap: wrap; gap: 4px; }
+.announcement-item {
+  font-size: 13px;
+  color: #e07a2f;
+  cursor: pointer;
+}
+.announcement-item:hover { text-decoration: underline; }
+
+/* ===== 公告详情弹窗 ===== */
+.ann-dialog-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ann-dialog {
+  background: white;
+  border-radius: 16px;
+  padding: 28px;
+  max-width: 460px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+.ann-dialog-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 14px;
+}
+.ann-dialog-content {
+  font-size: 14px;
+  color: #555;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  margin-bottom: 12px;
+}
+.ann-dialog-time {
+  font-size: 12px;
+  color: #aaa;
+  margin-bottom: 20px;
+}
+.ann-dialog-close {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: 600;
 }
 </style>

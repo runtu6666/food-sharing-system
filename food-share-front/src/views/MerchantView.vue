@@ -285,6 +285,9 @@
             <div :class="['tab-item', activeTab === 'notes' ? 'active' : '']" @click="activeTab = 'notes'">
               📝 顾客探店笔记
             </div>
+            <div :class="['tab-item', activeTab === 'merchantInfo' ? 'active' : '']" @click="activeTab = 'merchantInfo'; loadMerchantInfo()">
+              🏷️ 资质信息
+            </div>
           </div>
 
           <div class="tab-content">
@@ -492,6 +495,79 @@
               </div>
             </div>
 
+            <!-- Tab4: 资质信息 -->
+            <div v-show="activeTab === 'merchantInfo'" class="merchant-info-panel">
+              <div class="panel-header">
+                <h3>商家资质信息</h3>
+              </div>
+
+              <div class="info-notice">
+                📋 请如实填写以下资质信息，信息仅用于平台审核，不会对外公开。身份证号显示时已做脱敏处理。
+              </div>
+
+              <div class="info-form">
+                <div class="info-form-row">
+                  <label>法人姓名 <span class="required">*</span></label>
+                  <input
+                      v-model="infoForm.legalName"
+                      class="info-input"
+                      placeholder="请输入营业执照上的法人姓名"
+                  />
+                </div>
+                <div class="info-form-row">
+                  <label>身份证号码 <span class="required">*</span></label>
+                  <input
+                      v-model="infoForm.idCard"
+                      class="info-input"
+                      placeholder="请输入法人身份证号码（18位）"
+                      maxlength="18"
+                  />
+                </div>
+                <div class="info-form-row">
+                  <label>营业执照编号 <span class="required">*</span></label>
+                  <input
+                      v-model="infoForm.licenseNumber"
+                      class="info-input"
+                      placeholder="请输入营业执照统一社会信用代码"
+                  />
+                </div>
+                <div class="info-form-row">
+                  <label>营业执照图片</label>
+                  <div class="license-upload-area">
+                    <img
+                        v-if="infoForm.licenseImage"
+                        :src="infoForm.licenseImage"
+                        class="license-preview"
+                        @click="dialogImageUrl = infoForm.licenseImage; dialogVisible = true"
+                    />
+                    <label v-else class="license-upload-placeholder">
+                      <input type="file" accept="image/*" style="display:none" @change="onLicenseImageChange" />
+                      <div class="upload-icon">📷</div>
+                      <div class="upload-text">点击上传执照图片</div>
+                    </label>
+                    <label v-if="infoForm.licenseImage" class="license-reupload">
+                      <input type="file" accept="image/*" style="display:none" @change="onLicenseImageChange" />
+                      🔄 重新上传
+                    </label>
+                  </div>
+                </div>
+
+                <!-- 已提交的资质信息展示 -->
+                <div v-if="existingInfo" class="existing-info-card">
+                  <div class="existing-info-title">✅ 当前已提交的资质信息</div>
+                  <div class="existing-info-row"><span class="info-label">法人姓名：</span><span>{{ existingInfo.legalName }}</span></div>
+                  <div class="existing-info-row"><span class="info-label">身份证号：</span><span>{{ existingInfo.idCard }}</span></div>
+                  <div class="existing-info-row"><span class="info-label">执照编号：</span><span>{{ existingInfo.licenseNumber }}</span></div>
+                  <div class="existing-info-row"><span class="info-label">提交时间：</span><span>{{ existingInfo.createTime }}</span></div>
+                  <div class="existing-info-row"><span class="info-label">最近更新：</span><span>{{ existingInfo.updateTime }}</span></div>
+                </div>
+
+                <button class="confirm-btn" style="margin-top:20px;width:100%" @click="saveMerchantInfo">
+                  {{ existingInfo ? '更新资质信息' : '提交资质信息' }}
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -606,7 +682,16 @@ export default {
       showMapDialog: false,  // 控制弹窗显示
       editSearchKeyword: '', // 弹窗里的搜索词
       editMap: null,         // 弹窗地图实例
-      editMarker: null       // 弹窗地图上的标记点
+      editMarker: null,      // 弹窗地图上的标记点
+
+      // 商家资质信息
+      infoForm: {
+        legalName: '',
+        idCard: '',
+        licenseNumber: '',
+        licenseImage: ''
+      },
+      existingInfo: null  // 已提交的资质信息（有则显示，null则未提交过）
     }
   },
 
@@ -1317,10 +1402,78 @@ export default {
      * @param imageUrl 被点击图片的完整网络访问 URL
      */
     handlePreview(imageUrl) {
-      // 1. 将被点击图片的 URL 赋值给预览专用的数据模型
       this.dialogImageUrl = imageUrl;
-      // 2. 将弹窗的状态标识设置为 true，触发 DOM 元素的渲染和显示
       this.dialogVisible = true;
+    },
+
+    // 加载商家资质信息
+    async loadMerchantInfo() {
+      if (!this.user || !this.user.id) return
+      try {
+        const res = await this.$axios.get('/merchantInfo/get', { params: { userId: this.user.id } })
+        if (res.data.code === 200 && res.data.data) {
+          this.existingInfo = res.data.data
+          // 预填表单（身份证已脱敏，不预填）
+          this.infoForm.legalName = res.data.data.legalName || ''
+          this.infoForm.licenseNumber = res.data.data.licenseNumber || ''
+          this.infoForm.licenseImage = res.data.data.licenseImage || ''
+        }
+      } catch (e) {
+        this.$message.error('加载资质信息失败')
+      }
+    },
+
+    // 营业执照图片选择处理（转base64）
+    onLicenseImageChange(e) {
+      const file = e.target.files[0]
+      if (!file) return
+      if (file.size > 2 * 1024 * 1024) {
+        this.$message.warning('图片大小不能超过2MB')
+        return
+      }
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        this.infoForm.licenseImage = ev.target.result
+      }
+      reader.readAsDataURL(file)
+    },
+
+    // 提交或更新资质信息
+    async saveMerchantInfo() {
+      if (!this.infoForm.legalName.trim()) {
+        this.$message.warning('请填写法人姓名')
+        return
+      }
+      if (!this.infoForm.idCard.trim()) {
+        this.$message.warning('请填写身份证号码')
+        return
+      }
+      if (this.infoForm.idCard.trim().length !== 18) {
+        this.$message.warning('身份证号码应为18位')
+        return
+      }
+      if (!this.infoForm.licenseNumber.trim()) {
+        this.$message.warning('请填写营业执照编号')
+        return
+      }
+      try {
+        const res = await this.$axios.post('/merchantInfo/save', {
+          userId: this.user.id,
+          legalName: this.infoForm.legalName,
+          idCard: this.infoForm.idCard,
+          licenseNumber: this.infoForm.licenseNumber,
+          licenseImage: this.infoForm.licenseImage
+        })
+        if (res.data.code === 200) {
+          this.$message.success(res.data.message || '提交成功')
+          this.loadMerchantInfo()  // 刷新已提交信息展示
+          this.infoForm.idCard = '' // 清空身份证输入框
+        } else {
+          this.$message.error(res.data.message || '提交失败')
+        }
+      } catch (e) {
+        this.$message.error('提交失败，请重试')
+      }
     },
   }
 }
@@ -2069,4 +2222,75 @@ export default {
 .dish-price-wrap { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
 .dish-discount { font-size: 16px; font-weight: 900; color: #e53935; }
 .old-price { text-decoration: line-through; color: #999; font-size: 12px; font-weight: normal; }
+
+/* ===== 商家资质信息样式 ===== */
+.merchant-info-panel { padding: 4px 0; }
+.info-notice {
+  background: #fff8f0;
+  border: 1px solid #ffd9b8;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #a05a00;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+.info-form { display: flex; flex-direction: column; gap: 18px; }
+.info-form-row { display: flex; flex-direction: column; gap: 6px; }
+.info-form-row label { font-size: 14px; font-weight: 600; color: #333; }
+.required { color: #ff4d4f; }
+.info-input {
+  padding: 10px 14px;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+}
+.info-input:focus { border-color: #ff6b35; }
+.license-upload-area { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.license-preview {
+  width: 160px; height: 100px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid #eee;
+  cursor: pointer;
+}
+.license-upload-placeholder {
+  width: 160px; height: 100px;
+  border: 2px dashed #ddd;
+  border-radius: 10px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  cursor: pointer; gap: 6px;
+  transition: border-color 0.2s;
+}
+.license-upload-placeholder:hover { border-color: #ff6b35; }
+.upload-icon { font-size: 28px; }
+.upload-text { font-size: 12px; color: #aaa; }
+.license-reupload {
+  font-size: 13px; color: #ff6b35;
+  cursor: pointer; text-decoration: underline;
+}
+.existing-info-card {
+  background: #f9fafb;
+  border: 1px solid #e8e8e8;
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 4px;
+}
+.existing-info-title {
+  font-size: 14px; font-weight: 600;
+  color: #52c41a; margin-bottom: 12px;
+}
+.existing-info-row {
+  display: flex; align-items: flex-start;
+  font-size: 13px; color: #555;
+  padding: 5px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.existing-info-row:last-child { border-bottom: none; }
+.info-label { font-weight: 600; color: #888; min-width: 80px; }
 </style>

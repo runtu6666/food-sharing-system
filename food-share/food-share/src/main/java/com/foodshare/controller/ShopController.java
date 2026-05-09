@@ -4,6 +4,8 @@ import com.foodshare.common.Result;
 import com.foodshare.entity.Note;
 import com.foodshare.entity.Shop;
 import com.foodshare.entity.ShopReview;
+import com.foodshare.mapper.HotSearchMapper;
+import com.foodshare.mapper.SearchHistoryMapper;
 import com.foodshare.mapper.ShopMapper;
 import com.foodshare.mapper.UserMapper;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,6 +30,12 @@ public class ShopController {
     @Autowired
     private UserMapper userMapper;
 
+    @Autowired
+    private SearchHistoryMapper searchHistoryMapper;
+
+    @Autowired
+    private HotSearchMapper hotSearchMapper;
+
 
     // ==================== 店铺查询接口 ====================
 
@@ -42,7 +50,13 @@ public class ShopController {
      * @return 店铺列表(最多10条)
      */
     @GetMapping("/search")
-    public Result search(@RequestParam String keyword) {
+    public Result search(@RequestParam String keyword,
+                         @RequestParam(required = false) Long userId) {
+        // 记录搜索历史和更新热搜统计
+        if (keyword != null && !keyword.trim().isEmpty() && userId != null) {
+            searchHistoryMapper.insert(userId, keyword.trim(), 2);
+            hotSearchMapper.upsert(keyword.trim());
+        }
         List<Shop> shops = shopMapper.searchByKeyword(keyword);
         return Result.success(shops);
     }
@@ -89,17 +103,23 @@ public class ShopController {
             @RequestParam("lat") BigDecimal lat,
             @RequestParam(value = "radius", required = false, defaultValue = "5000") Double radius,
             @RequestParam(value = "keyword", required = false) String keyword,
-            @RequestParam(value = "categoryId", required = false) Long categoryId) {
+            @RequestParam(value = "categoryId", required = false) Long categoryId,
+            @RequestParam(value = "userId", required = false) Long userId) {
 
-        // 参数校验，防止前端传空数据导致底层 SQL 报错
+        // 参数校验
         if (lng == null || lat == null) {
             return Result.error("无法获取当前定位坐标，请检查授权");
         }
 
-        // 执行 LBS 距离计算、店名模糊匹配、分类精准过滤的联合查询
+        // 如果用户传了搜索关键词，记录搜索历史和热搜统计
+        if (keyword != null && !keyword.trim().isEmpty() && userId != null) {
+            searchHistoryMapper.insert(userId, keyword.trim(), 2);
+            hotSearchMapper.upsert(keyword.trim());
+        }
+
+        // 执行LBS距离计算、店名模糊匹配、分类精准过滤的联合查询
         List<Shop> shopList = shopMapper.selectNearbyShops(lng, lat, radius, keyword, categoryId);
 
-        // 3. 返回成功结果给前端渲染列表
         return Result.success(shopList);
     }
 

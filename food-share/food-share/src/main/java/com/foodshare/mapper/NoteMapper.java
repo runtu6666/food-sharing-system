@@ -370,5 +370,12 @@ public interface NoteMapper {
             "</script>")
     List<Map<String, Object>> findAllPublished(@Param("keyword") String keyword);
 
+    /**
+     * 查询笔记的作者ID和标题（用于发送通知）
+     * @param noteId 笔记ID
+     * @return 包含userId和title的Map
+     */
+    @Select("SELECT user_id AS userId, title FROM note WHERE id = #{noteId}")
+    Map<String, Object> findNoteAuthorInfo(@Param("noteId") Long noteId);
 
 }

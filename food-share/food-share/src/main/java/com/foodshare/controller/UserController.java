@@ -1,9 +1,12 @@
 package com.foodshare.controller;
 
 import com.foodshare.common.Result;
+import com.foodshare.entity.LoginLog;
 import com.foodshare.entity.User;
+import com.foodshare.mapper.LoginLogMapper;
 import com.foodshare.mapper.UserMapper;
 import com.foodshare.utils.JwtUtil;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,6 +27,9 @@ public class UserController {
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private LoginLogMapper loginLogMapper;
 
     /**
      * 用户登录
@@ -54,7 +60,7 @@ public class UserController {
      * @return 登录结果(包含token和用户基本信息)
      */
     @PostMapping("/login")
-    public Result login(@RequestBody User user) {
+    public Result login(@RequestBody User user, HttpServletRequest request) {
         // 根据用户名查询用户
         User dbUser = userMapper.findByUsername(user.getUsername());
 
@@ -65,6 +71,12 @@ public class UserController {
 
         // 密码错误
         if (!dbUser.getPassword().equals(user.getPassword())) {
+            // 记录失败日志
+            LoginLog failLog = new LoginLog();
+            failLog.setLoginIp(request.getRemoteAddr());
+            failLog.setDevice(request.getHeader("User-Agent"));
+            failLog.setStatus(0);
+            loginLogMapper.insert(failLog);
             return Result.error("密码错误");
         }
 
@@ -79,6 +91,14 @@ public class UserController {
                 dbUser.getUsername(),
                 dbUser.getRole()
         );
+
+        // 记录登录成功日志
+        LoginLog log = new LoginLog();
+        log.setUserId(dbUser.getId());
+        log.setLoginIp(request.getRemoteAddr());
+        log.setDevice(request.getHeader("User-Agent"));
+        log.setStatus(1);
+        loginLogMapper.insert(log);
 
         // 构建返回数据
         Map<String, Object> data = new HashMap<>();

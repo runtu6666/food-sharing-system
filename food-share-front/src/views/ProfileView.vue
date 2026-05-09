@@ -86,6 +86,14 @@
               :class="['menu-item', activeTab === 'comments' ? 'active' : '']"
               @click="activeTab = 'comments'; loadCommentRecords()"
           >💬 收到评论</div>
+          <!-- 消息通知 -->
+          <div
+              :class="['menu-item', activeTab === 'notifications' ? 'active' : '']"
+              @click="activeTab = 'notifications'; loadNotifications()"
+          >
+            🔔 消息通知
+            <span v-if="unreadCount > 0" class="notif-badge">{{ unreadCount }}</span>
+          </div>
           <div class="menu-item" @click="$router.push('/publish')">✏️ 发布笔记</div>
           <div class="menu-item logout" @click="logout">🚪 退出登录</div>
         </div>
@@ -274,6 +282,46 @@
           </div>
         </div>
 
+        <!-- 消息通知 -->
+        <div v-if="activeTab === 'notifications'">
+          <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;">
+            <h2>消息通知</h2>
+            <button
+                v-if="notifications.some(n => n.isRead === 0)"
+                class="read-all-btn"
+                @click="markAllRead"
+            >全部已读</button>
+          </div>
+
+          <div v-if="notifications.length === 0" class="empty-state">
+            <div class="empty-icon">🔔</div>
+            <p>暂无消息通知</p>
+          </div>
+
+          <div v-else class="notif-list">
+            <div
+                v-for="notif in notifications"
+                :key="notif.id"
+                :class="['notif-item', notif.isRead === 0 ? 'unread' : '']"
+                @click="readNotif(notif)"
+            >
+              <div class="notif-type-icon">
+                <span v-if="notif.type === 1">👍</span>
+                <span v-else-if="notif.type === 2">💬</span>
+                <span v-else-if="notif.type === 3">✅</span>
+                <span v-else-if="notif.type === 4">❌</span>
+                <span v-else>📢</span>
+              </div>
+              <div class="notif-body">
+                <div class="notif-title">{{ notif.title }}</div>
+                <div class="notif-content">{{ notif.content }}</div>
+                <div class="notif-time">{{ notif.createTime }}</div>
+              </div>
+              <div v-if="notif.isRead === 0" class="notif-dot"></div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -386,6 +434,8 @@ export default {
       myLikedNotes: [],     // 我点赞过的笔记列表
       likeRecords: [],      // 我的获赞明细列表
       commentRecords: [],   // 我收到的评论记录
+      notifications: [],    // 消息通知列表
+      unreadCount: 0,       // 未读通知数量
       categories: [],       // 分类列表（用于编辑笔记时选择分类）
       showProfileModal: false, // 是否显示资料编辑弹窗
       showNoteModal: false,    // 是否显示笔记编辑弹窗
@@ -427,6 +477,7 @@ export default {
     // 进入个人中心时预加载“收到评论”，用于顶部统计数字展示
     this.loadCommentRecords()
     this.loadCategories()
+    this.loadUnreadCount()  // 加载未读通知数量，显示在菜单红点上
     // 如果URL带了tab=collect参数，自动切换到收藏标签
     if (this.$route.query.tab === 'collect') {
       this.activeTab = 'collect'
@@ -686,6 +737,54 @@ export default {
     // 根据审核状态返回对应文字
     getStatusText(status) {
       return { 0: '⏳ 待审核', 1: '✅ 已通过', 2: '❌ 已驳回', 3: '⚠️ 违规屏蔽' }[status] || '待审核'
+    },
+
+
+    // 加载未读通知数量（显示在菜单角标）
+    async loadUnreadCount() {
+      if (!this.user || !this.user.id) return
+      try {
+        const res = await this.$axios.get('/notification/unreadCount', { params: { userId: this.user.id } })
+        if (res.data.code === 200) this.unreadCount = res.data.data
+      } catch (e) { /* 不影响主流程 */ }
+    },
+
+    // 加载消息通知列表
+    async loadNotifications() {
+      if (!this.user || !this.user.id) return
+      try {
+        const res = await this.$axios.get('/notification/list', { params: { userId: this.user.id } })
+        if (res.data.code === 200) {
+          this.notifications = res.data.data
+          this.unreadCount = this.notifications.filter(n => n.isRead === 0).length
+        }
+      } catch (e) { this.$message.error('加载通知失败') }
+    },
+
+    // 点击通知 → 标记已读，若有关联目标则跳转
+    async readNotif(notif) {
+      if (notif.isRead === 0) {
+        try {
+          await this.$axios.post('/notification/read/' + notif.id)
+          notif.isRead = 1
+          this.unreadCount = Math.max(0, this.unreadCount - 1)
+        } catch (e) { /* 标记失败不影响跳转 */ }
+      }
+      // 点赞/评论/审核通知 → 跳转到对应笔记
+      if ((notif.type === 1 || notif.type === 2 || notif.type === 3 || notif.type === 4) && notif.targetId) {
+        this.$router.push('/note/' + notif.targetId)
+      }
+    },
+
+    // 全部标记为已读
+    async markAllRead() {
+      if (!this.user || !this.user.id) return
+      try {
+        await this.$axios.post('/notification/readAll', null, { params: { userId: this.user.id } })
+        this.notifications.forEach(n => n.isRead = 1)
+        this.unreadCount = 0
+        this.$message.success('全部已读')
+      } catch (e) { this.$message.error('操作失败') }
     },
 
     logout() {
@@ -1028,5 +1127,53 @@ export default {
   .user-card {
     padding: 18px;
   }
+}
+
+/* ===== 消息通知样式 ===== */
+.notif-badge {
+  background: #ff4d4f;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 1px 6px;
+  margin-left: 6px;
+}
+.read-all-btn {
+  font-size: 13px;
+  color: #ff6b35;
+  background: none;
+  border: 1px solid #ff6b35;
+  border-radius: 20px;
+  padding: 4px 14px;
+  cursor: pointer;
+}
+.read-all-btn:hover { background: #fff3ee; }
+.notif-list { display: flex; flex-direction: column; gap: 10px; }
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: white;
+  border-radius: 14px;
+  padding: 16px;
+  border: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+.notif-item:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); border-color: #ffd9b8; }
+.notif-item.unread { background: #fff9f5; border-color: #ffd9b8; }
+.notif-type-icon { font-size: 22px; flex-shrink: 0; margin-top: 2px; }
+.notif-body { flex: 1; }
+.notif-title { font-size: 14px; font-weight: 600; color: #333; margin-bottom: 4px; }
+.notif-content { font-size: 13px; color: #666; line-height: 1.5; margin-bottom: 6px; }
+.notif-time { font-size: 12px; color: #aaa; }
+.notif-dot {
+  width: 8px; height: 8px;
+  background: #ff4d4f;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 6px;
 }
 </style>

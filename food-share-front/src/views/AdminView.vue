@@ -85,6 +85,24 @@
           <span class="menu-icon">🛡️</span>
           <span class="menu-text">风控管理</span>
         </div>
+
+        <!-- 系统公告管理 -->
+        <div
+            :class="['menu-item', activeMenu === 'announcement' ? 'active' : '']"
+            @click="activeMenu = 'announcement'; loadAnnouncements()"
+        >
+          <span class="menu-icon">📢</span>
+          <span class="menu-text">系统公告</span>
+        </div>
+
+        <!-- 登录日志 -->
+        <div
+            :class="['menu-item', activeMenu === 'loginLog' ? 'active' : '']"
+            @click="activeMenu = 'loginLog'"
+        >
+          <span class="menu-icon">🔐</span>
+          <span class="menu-text">登录日志</span>
+        </div>
       </div>
 
       <!-- 底部：管理员信息和退出 -->
@@ -412,7 +430,15 @@
                 >
                   删除
                 </el-button>
-                <span v-else style="font-size:12px;color:#bbb;margin-left:6px">管理员账号不可删除</span>
+                <el-button
+                    v-if="scope.row.role === 'shop'"
+                    size="small"
+                    type="info"
+                    @click="viewMerchantInfo(scope.row.id)"
+                >
+                  查看资质
+                </el-button>
+                <span v-if="scope.row.role === 'admin'" style="font-size:12px;color:#bbb;margin-left:6px">管理员账号不可删除</span>
               </template>
             </el-table-column>
           </el-table>
@@ -591,12 +617,12 @@
         </span>
                 <!-- 封禁/解封按钮 -->
                 <div style="display: flex; gap: 8px;">
-                <button
-                    :class="['shop-ban-btn', shop.status === 2 ? 'btn-unban' : 'btn-ban']"
-                    @click="toggleShopBan(shop)"
-                >
-                  {{ shop.status === 2 ? '解封' : '封禁' }}
-                </button>
+                  <button
+                      :class="['shop-ban-btn', shop.status === 2 ? 'btn-unban' : 'btn-ban']"
+                      @click="toggleShopBan(shop)"
+                  >
+                    {{ shop.status === 2 ? '解封' : '封禁' }}
+                  </button>
                   <button class="shop-ban-btn btn-ban" @click="handleAdminDeleteShop(shop)">彻底删除</button>
                 </div>
               </div>
@@ -637,6 +663,110 @@
           </div>
         </div>
 
+        <!-- 系统公告管理面板 -->
+        <div v-if="activeMenu === 'announcement'">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+            <h2 style="margin:0">📢 系统公告管理</h2>
+          </div>
+
+          <!-- 发布新公告 -->
+          <div class="category-add-bar" style="flex-direction:column;align-items:stretch;gap:10px">
+            <input
+                v-model="annForm.title"
+                class="category-input"
+                placeholder="公告标题..."
+            />
+            <textarea
+                v-model="annForm.content"
+                class="category-input"
+                placeholder="公告内容..."
+                rows="3"
+                style="resize:vertical;font-size:14px;padding:10px"
+            ></textarea>
+            <button class="btn-pass" @click="publishAnnouncement">📢 发布公告</button>
+          </div>
+
+          <!-- 公告列表 -->
+          <div class="category-list" style="margin-top:20px">
+            <div v-if="announcementList.length === 0" style="text-align:center;padding:60px 0;color:#aaa">
+              <div style="font-size:48px;margin-bottom:16px">📭</div>
+              <p>暂无公告</p>
+            </div>
+            <div v-for="ann in announcementList" :key="ann.id" class="category-item-row">
+              <div class="category-view">
+                <div style="flex:1">
+                  <!-- 非编辑状态：显示内容 -->
+                  <template v-if="editingAnnId !== ann.id">
+                    <div style="font-weight:600;color:#333;margin-bottom:4px">{{ ann.title }}</div>
+                    <div style="font-size:13px;color:#888;margin-bottom:4px">{{ ann.content }}</div>
+                    <div style="font-size:12px;color:#bbb">{{ ann.createTime }}</div>
+                  </template>
+                  <!-- 编辑状态：显示输入框 -->
+                  <template v-else>
+                    <input v-model="editingAnn.title" class="category-input" style="margin-bottom:8px" placeholder="公告标题" />
+                    <textarea v-model="editingAnn.content" class="category-input" rows="2" style="resize:vertical;font-size:13px;padding:8px" placeholder="公告内容"></textarea>
+                  </template>
+                </div>
+                <div class="category-actions" style="flex-shrink:0">
+                  <!-- 编辑中显示保存/取消，否则显示正常操作 -->
+                  <template v-if="editingAnnId === ann.id">
+                    <button class="btn-pass" @click="saveAnnEdit(ann)">💾 保存</button>
+                    <button class="btn-reject" @click="editingAnnId = null">✖ 取消</button>
+                  </template>
+                  <template v-else>
+                    <button class="btn-pass" style="background:#6c8ebf" @click="startEditAnn(ann)">✏️ 编辑</button>
+                    <button
+                        :class="ann.status === 1 ? 'btn-reject' : 'btn-pass'"
+                        @click="toggleAnn(ann)"
+                    >{{ ann.status === 1 ? '🙈 隐藏' : '👁️ 显示' }}</button>
+                    <button class="btn-reject" @click="deleteAnn(ann.id)">🗑️ 删除</button>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 登录日志面板 -->
+        <div v-if="activeMenu === 'loginLog'">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+            <h2 style="margin:0">🔐 登录日志查询</h2>
+          </div>
+
+          <div class="category-add-bar">
+            <input
+                v-model="logQueryUserId"
+                class="category-input"
+                placeholder="输入用户ID查询登录记录..."
+                type="number"
+                min="1"
+                @keyup.enter="queryLoginLog"
+            />
+            <button class="btn-pass" @click="queryLoginLog">🔍 查询</button>
+          </div>
+
+          <div style="margin-top:20px">
+            <div v-if="loginLogs.length === 0 && logQueried" style="text-align:center;padding:60px 0;color:#aaa">
+              <div style="font-size:48px;margin-bottom:16px">📋</div>
+              <p>该用户暂无登录记录</p>
+            </div>
+            <el-table v-if="loginLogs.length > 0" :data="loginLogs" border style="margin-top:16px">
+              <el-table-column prop="id" label="ID" width="70"/>
+              <el-table-column prop="userId" label="用户ID" width="90"/>
+              <el-table-column prop="loginIp" label="登录IP"/>
+              <el-table-column prop="loginTime" label="登录时间"/>
+              <el-table-column label="状态" width="90">
+                <template #default="{ row }">
+                  <span :style="{ color: row.status === 1 ? '#52c41a' : '#ff4d4f', fontWeight: '600' }">
+                    {{ row.status === 1 ? '✅ 成功' : '❌ 失败' }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="device" label="设备信息" show-overflow-tooltip/>
+            </el-table>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -653,6 +783,37 @@
     <el-dialog v-model="previewVisible" title="🔎 图片预览" width="700px" destroy-on-close>
       <div style="text-align: center;">
         <img :src="previewImageUrl" style="max-width: 100%; max-height: 70vh; border-radius: 8px; object-fit: contain;" alt="放大预览" />
+      </div>
+    </el-dialog>
+
+    <!-- 商家资质信息弹窗 -->
+    <el-dialog v-model="merchantInfoDialog" title="🏷️ 商家资质信息" width="480px" destroy-on-close>
+      <div v-if="currentMerchantInfo" style="display:flex;flex-direction:column;gap:14px;">
+        <div style="display:flex;gap:12px;align-items:center;padding:10px;background:#f9f9f9;border-radius:10px;">
+          <span style="font-weight:600;color:#888;min-width:90px;">法人姓名</span>
+          <span>{{ currentMerchantInfo.legalName }}</span>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center;padding:10px;background:#f9f9f9;border-radius:10px;">
+          <span style="font-weight:600;color:#888;min-width:90px;">身份证号</span>
+          <span>{{ currentMerchantInfo.idCard }}</span>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center;padding:10px;background:#f9f9f9;border-radius:10px;">
+          <span style="font-weight:600;color:#888;min-width:90px;">执照编号</span>
+          <span>{{ currentMerchantInfo.licenseNumber }}</span>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center;padding:10px;background:#f9f9f9;border-radius:10px;">
+          <span style="font-weight:600;color:#888;min-width:90px;">提交时间</span>
+          <span>{{ currentMerchantInfo.createTime }}</span>
+        </div>
+        <div v-if="currentMerchantInfo.licenseImage" style="padding:10px;background:#f9f9f9;border-radius:10px;">
+          <div style="font-weight:600;color:#888;margin-bottom:8px;">营业执照图片</div>
+          <img :src="currentMerchantInfo.licenseImage" style="max-width:100%;border-radius:8px;cursor:pointer;"
+               @click="previewImageUrl=currentMerchantInfo.licenseImage;previewVisible=true" />
+        </div>
+      </div>
+      <div v-else style="text-align:center;padding:40px;color:#aaa;">
+        <div style="font-size:40px;margin-bottom:12px">📭</div>
+        <p>该商家尚未提交资质信息</p>
       </div>
     </el-dialog>
 
@@ -691,6 +852,18 @@ export default {
       newWord: '',           // 输入框绑定的新敏感词
       previewVisible: false, // 控制图片预览弹窗显示
       previewImageUrl: '',   // 存放当前放大预览的图片URL
+      // 系统公告
+      announcementList: [],
+      annForm: { title: '', content: '' },
+      editingAnnId: null,              // 当前正在编辑的公告ID
+      editingAnn: { title: '', content: '' }, // 编辑中的公告内容
+      // 登录日志
+      logQueryUserId: '',
+      loginLogs: [],
+      logQueried: false,
+      // 商家资质弹窗
+      merchantInfoDialog: false,
+      currentMerchantInfo: null,
     }
   },
   mounted() {
@@ -1036,6 +1209,106 @@ export default {
     },
 
     // 退出登录
+    // 查看商家资质信息
+    async viewMerchantInfo(userId) {
+      try {
+        const res = await this.$axios.get('/merchantInfo/get', { params: { userId } })
+        this.currentMerchantInfo = res.data.code === 200 ? res.data.data : null
+        this.merchantInfoDialog = true
+      } catch (e) {
+        this.$message.error('查询失败')
+      }
+    },
+
+    // 开始编辑公告
+    startEditAnn(ann) {
+      this.editingAnnId = ann.id
+      this.editingAnn = { title: ann.title, content: ann.content }
+    },
+
+    // 保存公告编辑
+    async saveAnnEdit(ann) {
+      if (!this.editingAnn.title.trim()) {
+        this.$message.warning('公告标题不能为空')
+        return
+      }
+      const res = await this.$axios.post('/announcement/update', {
+        id: ann.id,
+        title: this.editingAnn.title,
+        content: this.editingAnn.content
+      })
+      if (res.data.code === 200) {
+        ann.title = this.editingAnn.title
+        ann.content = this.editingAnn.content
+        this.editingAnnId = null
+        this.$message.success('修改成功')
+      } else {
+        this.$message.error('修改失败')
+      }
+    },
+
+    // 加载系统公告列表（管理员视图，含隐藏的）
+    async loadAnnouncements() {
+      const res = await this.$axios.get('/announcement/admin/list')
+      if (res.data.code === 200) this.announcementList = res.data.data
+    },
+
+    // 发布新公告
+    async publishAnnouncement() {
+      if (!this.annForm.title.trim()) {
+        this.$message.warning('请输入公告标题')
+        return
+      }
+      const res = await this.$axios.post('/announcement/add', {
+        title: this.annForm.title,
+        content: this.annForm.content,
+        adminId: this.user.id
+      })
+      if (res.data.code === 200) {
+        this.$message.success('公告发布成功')
+        this.annForm = { title: '', content: '' }
+        this.loadAnnouncements()
+      }
+    },
+
+    // 切换公告显示/隐藏
+    async toggleAnn(ann) {
+      const newStatus = ann.status === 1 ? 0 : 1
+      const res = await this.$axios.post('/announcement/toggleStatus', { id: ann.id, status: newStatus })
+      if (res.data.code === 200) {
+        ann.status = newStatus
+        this.$message.success(newStatus === 1 ? '已设为显示' : '已设为隐藏')
+      }
+    },
+
+    // 删除公告
+    async deleteAnn(id) {
+      if (!confirm('确定删除该公告？')) return
+      const res = await this.$axios.delete('/announcement/delete/' + id)
+      if (res.data.code === 200) {
+        this.$message.success('删除成功')
+        this.loadAnnouncements()
+      }
+    },
+
+    // 查询用户登录日志
+    async queryLoginLog() {
+      if (!this.logQueryUserId) {
+        this.$message.warning('请输入用户ID')
+        return
+      }
+      if (this.logQueryUserId < 1) {
+        this.$message.warning('用户ID必须大于0')
+        this.logQueryUserId = ''
+        return
+      }
+      const res = await this.$axios.get('/admin/loginLogs', { params: { userId: this.logQueryUserId } })
+      if (res.data.code === 200) {
+        this.loginLogs = res.data.data
+        this.logQueried = true
+      }
+    },
+
     logout() {
       localStorage.removeItem('user')
       this.$router.push('/login')

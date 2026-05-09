@@ -1,12 +1,18 @@
 package com.foodshare.controller;
 
 import com.foodshare.common.Result;
+import com.foodshare.entity.LoginLog;
+import com.foodshare.mapper.LoginLogMapper;
 import com.foodshare.mapper.UserMapper;
 import org.apache.ibatis.annotations.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import com.foodshare.entity.User;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +27,29 @@ public class AdminController {
 
     @Autowired
     private com.foodshare.mapper.ShopMapper shopMapper;
+
+    @Autowired
+    private LoginLogMapper loginLogMapper;
+
+    @Autowired
+    private DataSource dataSource;
+
+    /** 工具方法：向notification表插入一条通知 */
+    private void insertNotification(Long userId, int type, String title, String content, Long targetId) {
+        try (Connection conn = dataSource.getConnection()) {
+            PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO notification (user_id, type, title, content, target_id, is_read, create_time) " +
+                            "VALUES (?, ?, ?, ?, ?, 0, NOW())");
+            ps.setLong(1, userId);
+            ps.setInt(2, type);
+            ps.setString(3, title);
+            ps.setString(4, content);
+            ps.setObject(5, targetId);
+            ps.executeUpdate();
+        } catch (Exception e) {
+            System.err.println("通知写入失败: " + e.getMessage());
+        }
+    }
 
     // 数据概览
     @GetMapping("/stats")
@@ -46,6 +75,27 @@ public class AdminController {
         Integer status = Integer.valueOf(params.get("status").toString());
         String reason = params.getOrDefault("rejectReason", "").toString();
         userMapper.updateNoteStatus(id, status, reason);
+
+        // 审核结果通知笔记作者
+        try (Connection conn = dataSource.getConnection()) {
+            PreparedStatement ps = conn.prepareStatement("SELECT user_id, title FROM note WHERE id = ?");
+            ps.setLong(1, id);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                Long authorId = rs.getLong("user_id");
+                String title = rs.getString("title");
+                if (status == 1) {
+                    insertNotification(authorId, 3, "笔记审核通过",
+                            "你的笔记《" + title + "》已通过审核，已对外展示", id);
+                } else if (status == 2) {
+                    insertNotification(authorId, 4, "笔记审核未通过",
+                            "你的笔记《" + title + "》未通过审核，原因：" + (reason.isEmpty() ? "内容不符合规范" : reason), id);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("审核通知发送失败: " + e.getMessage());
+        }
+
         return Result.success("操作成功");
     }
 
@@ -103,6 +153,20 @@ public class AdminController {
     public Result approveShop(@RequestBody Map<String, Object> params) {
         Long id = Long.valueOf(params.get("id").toString());
         userMapper.updateShopStatus(id, 1, null);
+        // 通知商家审核通过
+        try (Connection conn = dataSource.getConnection()) {
+            PreparedStatement ps = conn.prepareStatement("SELECT user_id, name FROM shop WHERE id = ?");
+            ps.setLong(1, id);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                Long ownerId = rs.getLong("user_id");
+                String shopName = rs.getString("name");
+                insertNotification(ownerId, 3, "店铺入驻审核通过",
+                        "恭喜！你的店铺《" + shopName + "》已通过入驻审核，现已正式上线", id);
+            }
+        } catch (Exception e) {
+            System.err.println("商家审核通知失败: " + e.getMessage());
+        }
         return Result.success("操作成功");
     }
 
@@ -110,11 +174,22 @@ public class AdminController {
     @PostMapping("/shops/reject")
     public Result rejectShop(@RequestBody Map<String, Object> params) {
         Long id = Long.valueOf(params.get("id").toString());
-        // 安全获取前端传来的驳回原因
         String rejectReason = params.get("rejectReason") != null ? params.get("rejectReason").toString() : "资料不符，请重新核对";
-
-        // 调用刚才新建的带原因的更新方法
         userMapper.updateShopStatus(id, -1, rejectReason);
+        // 通知商家审核驳回
+        try (Connection conn = dataSource.getConnection()) {
+            PreparedStatement ps = conn.prepareStatement("SELECT user_id, name FROM shop WHERE id = ?");
+            ps.setLong(1, id);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                Long ownerId = rs.getLong("user_id");
+                String shopName = rs.getString("name");
+                insertNotification(ownerId, 4, "店铺入驻审核未通过",
+                        "你的店铺《" + shopName + "》未通过入驻审核，原因：" + rejectReason, id);
+            }
+        } catch (Exception e) {
+            System.err.println("商家驳回通知失败: " + e.getMessage());
+        }
         return Result.success("已拒绝");
     }
 
@@ -159,5 +234,15 @@ public class AdminController {
         // 执行店铺物理删除
         userMapper.deleteShopsByUserId(id); // 此处可优化为专门根据 shopId 删除的 mapper 方法
         return Result.success("店铺及相关评价已清理完毕");
+    }
+
+    /**
+     * 管理员查看指定用户的登录日志（最近20条）
+     * GET /admin/loginLogs?userId=1
+     */
+    @GetMapping("/loginLogs")
+    public Result loginLogs(@RequestParam Long userId) {
+        List<LoginLog> logs = loginLogMapper.findByUserId(userId);
+        return Result.success(logs);
     }
 }
