@@ -373,6 +373,6 @@ MIT License
 
 ## 作者
 
-**姚嘉全** - [GitHub](https://github.com/runtu6666)
+**闰土** - [GitHub](https://github.com/runtu6666)
 
 山东管理学院 · 2026 届本科毕业设计
