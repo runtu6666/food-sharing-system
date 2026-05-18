@@ -1480,7 +1480,7 @@ export default {
 </script>
 
 <style scoped>
-.merchant-page { min-height: 100vh; background: #f5f5f5; }
+.merchant-page { min-height: 100vh; background: #f5f5f5; overflow-x: hidden; }
 
 /* 导航栏 */
 .navbar {
@@ -1974,12 +1974,13 @@ export default {
 .tab-nav {
   display: flex;
   border-bottom: 2px solid #f5f5f5;
-  padding: 0 24px;
+  padding: 0 12px;
   background: white;
+  overflow-x: hidden; /* 隐藏多余内容，不显示滚动条 */
 }
 .tab-item {
-  padding: 16px 24px;
-  font-size: 15px;
+  padding: 14px 16px;
+  font-size: 14px;
   font-weight: 600;
   color: #999;
   cursor: pointer;
@@ -1987,6 +1988,7 @@ export default {
   transition: all 0.3s;
   margin-bottom: -2px;
   white-space: nowrap; /* 强制文字不换行 */
+  flex-shrink: 0; /* 不允许被压缩 */
 }
 .tab-item:hover { color: #ff6b35; }
 .tab-item.active { color: #ff6b35; border-bottom-color: #ff6b35; }
