@@ -28,9 +28,9 @@ public class JwtUtil {
     private static final Key SECRET_KEY = Keys.secretKeyFor(SignatureAlgorithm.HS256);
 
     /**
-     * token有效期: 7天(单位:毫秒)
+     * token有效期: 2小时(单位:毫秒)
      */
-    private static final long EXPIRATION_TIME = 7 * 24 * 60 * 60 * 1000;
+    private static final long EXPIRATION_TIME = 2 * 60 * 60 * 1000;
 
     /**
      * 生成JWT token

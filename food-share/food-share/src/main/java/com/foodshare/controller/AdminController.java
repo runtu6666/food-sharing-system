@@ -232,7 +232,7 @@ public class AdminController {
         // 调用统一的清理方法，移除店铺下的所有相关评价数据
         shopMapper.deleteReviewsByShopId(id);
         // 执行店铺物理删除
-        userMapper.deleteShopsByUserId(id); // 此处可优化为专门根据 shopId 删除的 mapper 方法
+        shopMapper.deleteById(id);
         return Result.success("店铺及相关评价已清理完毕");
     }
 

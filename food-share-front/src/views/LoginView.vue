@@ -152,6 +152,34 @@
                 </span>
               </div>
             </div>
+            <!-- 注册身份选择 -->
+            <div class="input-group">
+              <label>注册身份</label>
+              <div class="role-selector">
+                <div
+                    class="role-option"
+                    :class="{ active: registerForm.role === 'user' }"
+                    @click="registerForm.role = 'user'"
+                >
+                  <span class="role-icon">👤</span>
+                  <div class="role-info">
+                    <div class="role-name">普通用户</div>
+                    <div class="role-desc">浏览探店笔记，分享美食体验</div>
+                  </div>
+                </div>
+                <div
+                    class="role-option"
+                    :class="{ active: registerForm.role === 'shop' }"
+                    @click="registerForm.role = 'shop'"
+                >
+                  <span class="role-icon">🏪</span>
+                  <div class="role-info">
+                    <div class="role-name">商家入驻</div>
+                    <div class="role-desc">管理店铺信息，与顾客互动</div>
+                  </div>
+                </div>
+              </div>
+            </div>
             <!-- 注册按钮 -->
             <button class="submit-btn green" :class="{ loading }" @click="doRegister">
               <span v-if="!loading">立即注册</span>
@@ -188,7 +216,8 @@ export default {
       registerForm: {
         username: '',
         nickname: '',
-        password: ''
+        password: '',
+        role: 'user'
       }
     }
   },
@@ -526,4 +555,34 @@ export default {
   font-weight: 600;
 }
 .switch-link:hover { text-decoration: underline; }
+
+/* 注册身份选择器 */
+.role-selector {
+  display: flex;
+  gap: 10px;
+}
+.role-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 2px solid #eee;
+  border-radius: 12px;
+  cursor: pointer;
+  background: #f8f8fc;
+  transition: all 0.25s;
+}
+.role-option:hover {
+  border-color: #ffc9ad;
+  background: #fff8f5;
+}
+.role-option.active {
+  border-color: #ff6b35;
+  background: #fff3ee;
+}
+.role-icon { font-size: 22px; flex-shrink: 0; }
+.role-name { font-size: 13px; font-weight: 700; color: #333; }
+.role-desc { font-size: 11px; color: #999; margin-top: 2px; }
+.role-option.active .role-name { color: #ff6b35; }
 </style>

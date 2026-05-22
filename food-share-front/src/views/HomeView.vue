@@ -399,6 +399,12 @@ export default {
   },
 
   activated() {
+    // 重新同步用户信息：防止切换账号后 keep-alive 缓存仍保留旧用户数据
+    this.user = JSON.parse(localStorage.getItem('user') || '{}')
+    if (!this.user || !this.user.id) {
+      this.$router.push('/login')
+      return
+    }
     // 只要页面从其他地方切换回来，必然触发这里，强制重置并拉取最新数据
     this.page = 1;
     if (this.searchType === 'note') {
@@ -567,14 +573,19 @@ export default {
               this.userLat = position.coords.latitude;
               this.loadNearbyShops();
             },
-            // 获取失败 (用户拒绝授权或无GPS设备)
-            (error) => {
-              console.warn("定位失败，使用默认北京天安门坐标进行测试", error);
-              // 如果在电脑上测试报错，自动降级使用测试坐标（北京天安门）
-              this.userLng = 116.3974;
-              this.userLat = 39.9092;
-              this.$message.warning("获取位置失败，已使用测试坐标");
-              this.loadNearbyShops();
+            // 获取失败 (用户拒绝授权或无GPS设备)，降级展示全部店铺
+            async (error) => {
+              console.warn("定位失败，降级展示全部店铺", error);
+              this.$message.warning("获取位置失败，已为您展示全部店铺");
+              try {
+                const res = await this.$axios.get('/shop/list');
+                if (res.data.code === 200) {
+                  this.shops = res.data.data;
+                }
+              } catch (e) {
+                this.$message.error('获取店铺列表失败');
+              }
+              this.loading = false;
             },
             { timeout: 5000 } // 设置超时时间5秒，防止长时间请求导致页面白屏
         );
@@ -652,6 +663,7 @@ export default {
     // 退出登录：清除本地存储，跳转登录页
     logout() {
       localStorage.removeItem('user')
+      localStorage.removeItem('token')
       this.$router.push('/login')
     },
 

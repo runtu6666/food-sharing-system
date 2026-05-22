@@ -83,6 +83,9 @@ public interface ShopMapper {
     @Delete("DELETE FROM shop WHERE id = #{shopId} AND user_id = #{userId}")
     int deleteByIdAndUser(@Param("shopId") Long shopId, @Param("userId") Long userId);
 
+    @Delete("DELETE FROM shop WHERE id = #{shopId}")
+    void deleteById(@Param("shopId") Long shopId);
+
     /**
      * 校验店铺所有权
      * 使用场景: 回复评价前校验是否是店铺主人
