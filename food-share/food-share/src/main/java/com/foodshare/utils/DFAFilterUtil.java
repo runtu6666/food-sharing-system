@@ -5,8 +5,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import jakarta.annotation.PostConstruct;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 顶级敏感词过滤工具类 (基于 DFA 确定有穷自动机 + 数据库动态热更新)
@@ -22,6 +24,12 @@ public class DFAFilterUtil {
 
     // 核心 DFA 状态机容器 (Trie字典树的根节点)
     private Map<Object, Object> sensitiveWordMap;
+
+    // 否定词集合，从数据库动态加载，支持热更新
+    private Set<String> negationPrefixes = new HashSet<>();
+
+    // 向前回溯检查否定词的窗口大小（字符数）
+    private static final int NEGATION_WINDOW = 5;
 
     /**
      * @PostConstruct 确保 Spring 容器在实例化当前组件后，立刻执行该方法。
@@ -70,9 +78,12 @@ public class DFAFilterUtil {
         }
 
         // 3. 【原子操作】：将旧的字典树指针直接指向刚刚构建好的新树！
-        // 这一步极其平滑，瞬间完成旧词库到新词库的切换，完全不需要重启服务器。
         this.sensitiveWordMap = newMap;
-        System.out.println("🔥 DFA 敏感词库热更新完成，当前词汇量：" + words.size());
+
+        // 4. 同步加载否定词集合
+        this.negationPrefixes = new HashSet<>(sensitiveWordMapper.findAllNegationWords());
+
+        System.out.println("🔥 DFA 敏感词库热更新完成，敏感词：" + words.size() + " 条，否定词：" + negationPrefixes.size() + " 条");
     }
 
     /**
@@ -98,7 +109,11 @@ public class DFAFilterUtil {
                 if (nowMap != null) {
                     // 发现字符在字典树中！检查是否到达叶子节点（敏感词结尾）
                     if ("1".equals(nowMap.get("isEnd"))) {
-                        return true; // 命中敏感词！立刻拦截！
+                        // 命中敏感词，但若前面有否定词则视为合理表达，放行
+                        if (!isNegated(text, i)) {
+                            return true;
+                        }
+                        break; // 被否定词修饰，跳过本次匹配
                     }
                 } else {
                     // 状态链断裂，说明以当前字符开头的词不是敏感词，跳出内层探测
@@ -139,8 +154,8 @@ public class DFAFilterUtil {
                 }
             }
 
-            // 如果完整命中敏感词，执行打码替换操作
-            if (flag) {
+            // 如果完整命中敏感词，且未被否定词修饰，执行打码替换操作
+            if (flag && !isNegated(text, i)) {
                 StringBuilder replaceStr = new StringBuilder();
                 for (int k = 0; k < matchFlag; k++) {
                     replaceStr.append("*"); // 根据敏感词长度生成对应数量的星号
@@ -152,5 +167,24 @@ public class DFAFilterUtil {
             }
         }
         return resultTxt;
+    }
+
+    /**
+     * 检查敏感词命中位置前方是否存在否定词。
+     * 若存在，则认为该表达是在批评/反对该行为，属于正当言论，不应拦截。
+     *
+     * @param text       完整文本
+     * @param matchStart 敏感词在文本中的起始下标
+     * @return true 表示存在否定修饰，应放行
+     */
+    private boolean isNegated(String text, int matchStart) {
+        int windowStart = Math.max(0, matchStart - NEGATION_WINDOW);
+        String prefix = text.substring(windowStart, matchStart);
+        for (String neg : negationPrefixes) {
+            if (prefix.contains(neg)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

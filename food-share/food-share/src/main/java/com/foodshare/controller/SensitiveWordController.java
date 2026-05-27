@@ -42,17 +42,17 @@ public class SensitiveWordController {
     public Result add(@RequestBody Map<String, String> params) {
         String word = params.get("word");
         if (word == null || word.trim().isEmpty()) {
-            return Result.error("敏感词不能为空");
+            return Result.error("词条不能为空");
         }
 
-        // 1. 插入数据库
-        sensitiveWordMapper.insert(word.trim());
+        // type 默认 0（敏感词），传 "1" 则为否定词
+        int type = "1".equals(params.get("type")) ? 1 : 0;
 
-        // 2. 🔥 核心联动：数据变更后，立刻调用 DFA 工具类的 reload 大招！
-        // 这样不用重启 Tomcat 服务器，内存里的字典树瞬间完成重建！
+        sensitiveWordMapper.insert(word.trim(), type);
         dfaFilterUtil.reload();
 
-        return Result.success("添加成功，DFA 词库已热更新！");
+        String label = type == 1 ? "否定词" : "敏感词";
+        return Result.success("添加" + label + "成功，DFA 词库已热更新！");
     }
 
     /**

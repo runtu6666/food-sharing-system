@@ -11,17 +11,21 @@ import java.util.List;
 @Mapper
 public interface SensitiveWordMapper {
 
-    // 查询数据库中所有的敏感词字符串（用于构建 DFA 字典树）
-    @Select("SELECT word FROM sensitive_word")
+    // 查询所有敏感词字符串（type=0），用于构建 DFA 字典树
+    @Select("SELECT word FROM sensitive_word WHERE type = 0")
     List<String> findAllWords();
 
-    // 后台管理：分页或列表查询敏感词实体
+    // 查询所有否定词字符串（type=1），用于否定语境判断
+    @Select("SELECT word FROM sensitive_word WHERE type = 1")
+    List<String> findAllNegationWords();
+
+    // 后台管理：列表查询（返回全部类型）
     @Select("SELECT * FROM sensitive_word ORDER BY id DESC")
     List<SensitiveWord> findAll();
 
-    // 后台管理：添加敏感词（忽略重复插入报错）
-    @Insert("INSERT IGNORE INTO sensitive_word(word) VALUES(#{word})")
-    int insert(@Param("word") String word);
+    // 后台管理：添加词条，type=0 敏感词 / type=1 否定词
+    @Insert("INSERT IGNORE INTO sensitive_word(word, type) VALUES(#{word}, #{type})")
+    int insert(@Param("word") String word, @Param("type") int type);
 
     // 后台管理：删除敏感词
     @Delete("DELETE FROM sensitive_word WHERE id = #{id}")

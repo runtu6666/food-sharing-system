@@ -640,9 +640,13 @@
             <input
                 v-model="newWord"
                 class="category-input"
-                placeholder="输入新的违禁词..."
+                placeholder="输入词条..."
                 @keyup.enter="addWord"
             />
+            <select v-model="newWordType" class="category-input" style="width:120px;flex-shrink:0">
+              <option value="0">敏感词</option>
+              <option value="1">否定词</option>
+            </select>
             <button class="btn-pass" @click="addWord">⚡ 立刻添加并热更新</button>
           </div>
 
@@ -650,7 +654,14 @@
             <div v-for="word in sensitiveWords" :key="word.id" class="category-item-row">
               <div class="category-view">
                 <span class="category-id">ID: {{ word.id }}</span>
-                <span class="category-name" style="color: #ff4d4f;">{{ word.word }}</span>
+                <span v-if="word.type === 1"
+                      class="category-name"
+                      style="color:#52c41a">{{ word.word }}
+                  <span style="font-size:11px;background:#f6ffed;border:1px solid #b7eb8f;border-radius:4px;padding:1px 5px;margin-left:4px">否定词</span>
+                </span>
+                <span v-else class="category-name" style="color:#ff4d4f">{{ word.word }}
+                  <span style="font-size:11px;background:#fff1f0;border:1px solid #ffa39e;border-radius:4px;padding:1px 5px;margin-left:4px">敏感词</span>
+                </span>
                 <div class="category-actions">
                   <button class="btn-reject" @click="deleteWord(word.id)">🗑️ 移除</button>
                 </div>
@@ -849,7 +860,8 @@ export default {
       searchShopKeyword: '', // 商家搜索词
       searchNoteKeyword: '', // 笔记搜索词
       sensitiveWords: [],    // 敏感词列表数据
-      newWord: '',           // 输入框绑定的新敏感词
+      newWord: '',           // 输入框绑定的新词条
+      newWordType: '0',      // 新词条类型：0=敏感词 1=否定词
       previewVisible: false, // 控制图片预览弹窗显示
       previewImageUrl: '',   // 存放当前放大预览的图片URL
       // 系统公告
@@ -1188,11 +1200,12 @@ export default {
         this.$message.warning('请填写违禁词')
         return
       }
-      const res = await this.$axios.post('/admin/sensitive-word/add', { word: this.newWord })
+      const res = await this.$axios.post('/admin/sensitive-word/add', { word: this.newWord, type: this.newWordType })
       if (res.data.code === 200) {
-        this.$message.success(res.data.message) // 弹出炫酷的热更新成功提示
+        this.$message.success(res.data.message)
         this.newWord = ''
-        this.loadSensitiveWords() // 刷新列表
+        this.newWordType = '0'
+        this.loadSensitiveWords()
       } else {
         this.$message.error(res.data.message)
       }
